@@ -33,11 +33,11 @@ If it is available on PATH this variable is not required to be set.")
   (interactive
    (list (read-string "CMake command: " (or (car cmake-process-command-history) "") 'cmake-process-command-history)))
   (let ((shell-file-name cmake-process-preferred-shell))
-    (string-replace
-     ""
-     "\n"
-     (shell-command-to-string
-     (format "\"%s\" %s" cmake-process-cmake-executable command)))))
+    (let ((output (string-replace "" "\n"
+                                  (shell-command-to-string
+                                   (format "\"%s\" %s"
+                                           cmake-process-cmake-executable command)))))
+      (message "Output: %s" output))))
 
 (defun cmake-process-start-cmake (&rest args)
   "Start cmake with ARGS and return process object."

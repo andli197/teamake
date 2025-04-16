@@ -47,8 +47,7 @@
 (defun cmake-configure-set-source-path (path)
   "Set `cmake-configure-source-path' to PATH."
   (interactive
-   (list (read-directory-name "Select source path: "
-                              (or cmake-configure-source-path default-directory) '() t)))
+   (list (call-interactively 'cmake-project-root)))
 
   (if (not (file-exists-p (file-name-concat path "CMakeLists.txt")))
       (user-error "Selected path does not contain a CMakeLists.txt file and cannot be used as source path"))
