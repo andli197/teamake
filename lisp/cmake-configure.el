@@ -3,7 +3,6 @@
 
 (require 'transient)
 (require 'cmake-base)
-(require 'cmake-presets)
 
 (defvar cmake-configure-source-path ""
   "The current source path.")
@@ -35,14 +34,21 @@
 (defvar cmake-configure-install-prefix ""
   "Where to install.")
 
+;; (transient-define-argument cmake-configure--configuration ()
+;;   :class 'transient-switches
+;;   :argument-format "-DCMAKE_BUILD_TYPE=%s"
+;;   ;; :argument-regexp "\\(DCMAKE_BUILD_TYPE\\(grape\\|orange\\|cherry\\|lime\\)-snowcone\\)"
+;;   :choices '("Debug" "Release" "RelWithDebInfo"))
+
+
 (defvar cmake-configure-preset ""
   "Current selected preset.")
 
 (defun cmake-configure-set-source-path (path)
   "Set `cmake-configure-source-path' to PATH."
   (interactive
-   (let ((path (read-directory-name "Select source path: " cmake-configure-source-path '() t)))
-     (list path)))
+   (list (read-directory-name "Select source path: "
+                              (or cmake-configure-source-path default-directory) '() t)))
 
   (if (not (file-exists-p (file-name-concat path "CMakeLists.txt")))
       (user-error "Selected path does not contain a CMakeLists.txt file and cannot be used as source path"))
@@ -53,8 +59,8 @@
 (defun cmake-configure-set-build-path (path)
   "Set `cmake-configure-build-path' to PATH."
   (interactive
-   (let ((path (read-directory-name "Select build path: " cmake-configure-source-path '() t)))
-     (list path)))
+   (list (read-directory-name "Select build path: "
+                              (or cmake-configure-source-path default-directory) '() t)))
 
   (setq cmake-configure-build-path path)
   (message "Build path updated to %s" path))
@@ -62,8 +68,7 @@
 (defun cmake-configure-set-generator (generator)
   "Set `cmake-configure-generator' to GENERATOR."
   (interactive
-   (let ((generator (read-string "Generator: " cmake-configure-generator)))
-     (list generator)))
+   (list (read-string "Generator: " cmake-configure-generator)))
 
   (setq cmake-configure-generator generator)
   (message "Generator updated to %s" generator))
@@ -71,8 +76,7 @@
 (defun cmake-configure-set-toolset (toolset)
   "Set `cmake-configure-toolset' to TOOLSET."
   (interactive
-   (let ((toolset (read-string "Toolset: " cmake-configure-toolset)))
-     (list toolset)))
+   (list (read-string "Toolset: " cmake-configure-toolset)))
 
   (setq cmake-configure-toolset toolset)
   (message "Toolset updated to %s" toolset))
@@ -80,8 +84,7 @@
 (defun cmake-configure-set-platform (platform)
   "Set `cmake-configure-platform' to PLATFORM."
   (interactive
-   (let ((platform (read-string "Platform: " cmake-configure-toolset)))
-     (list platform)))
+   (list (read-string "Platform: " cmake-configure-platform)))
 
   (setq cmake-configure-platform platform)
   (message "Platform updated to %s" platform))
@@ -103,67 +106,53 @@
   (setq cmake-configure-install-prefix install-path)
   (message "Install prefix updated to %s" cmake-configure-install-prefix))
 
-(defun cmake-configure-set-preset (preset-name)
-  "Set `cmake-configure-preset' to PRESET-NAME."
-  (interactive
-   (list (completing-read "Preset: " (cmake-presets-get-configuration-presets cmake-configure-source-path) '() t cmake-configure-preset)))
-
-  (setq cmake-configure-preset preset-name)
-  (message "Preset updated to %s" cmake-configure-preset))
-
 (defun cmake-configure--describe-source-path ()
   "Return `cmake-configure-source-path' as protertized transient-variable."
   (format "Source path (%s)"
-          (propertize cmake-configure-source-path 'face 'transient-value)))
+          (propertize (format "-S=%s" cmake-configure-source-path)
+                      'face 'transient-value)))
 
 (defun cmake-configure--describe-build-path ()
   "Return `cmake-configure-build-path' as protertized transient-variable."
   (format "Build path (%s)"
-          (propertize (cmake-return-value-or-default cmake-configure-build-path "<Unset>")
+          (propertize (format "-B=%s" cmake-configure-build-path)
                       'face 'transient-value)))
 
 (defun cmake-configure--describe-generator ()
   "Return `cmake-configure-generator' as protertized transient-variable."
   (format "Generator (%s)"
-          (propertize (cmake-return-value-or-default cmake-configure-generator "<Unset>")
+          (propertize (format "-G=%s" cmake-configure-generator)
                       'face 'transient-value)))
 
 (defun cmake-configure--describe-toolset ()
   "Return `cmake-configure-toolset' as protertized transient-variable."
   (format "Toolset (%s)"
-          (propertize (cmake-return-value-or-default cmake-configure-toolset "<Unset>")
+          (propertize (format "-T=%s" cmake-configure-toolset)
                       'face 'transient-value)))
 
 (defun cmake-configure--describe-platform ()
   "Return `cmake-configure-platform' as protertized transient-variable."
   (format "Platform (%s)"
-          (propertize (cmake-return-value-or-default cmake-configure-platform "<Unset>")
+          (propertize (format "-A=%s" cmake-configure-platform)
                       'face 'transient-value)))
 
 (defun cmake-configure--describe-toolchain-file ()
   "Return `cmake-configure-toolchain-file' as protertized transient-variable."
   (format "Toolchain (%s)"
-          (propertize (cmake-return-value-or-default cmake-configure-toolchain-file "<Unset>")
+          (propertize (format "--toolchain-file=%s" cmake-configure-toolchain-file)
                       'face 'transient-value)))
 
 (defun cmake-configure--describe-install-prefix ()
   "Return `cmake-configure-install-prefix' as protertized transient-variable."
   (format "Install (%s)"
-          (propertize (cmake-return-value-or-default cmake-configure-install-prefix "<Unset>")
+          (propertize (format "-DCMAKE_INSTALL_PREFIX=%s" (cmake-return-value-or-default cmake-configure-install-prefix "<Unset>"))
                       'face 'transient-value)))
 
-(defun cmake-configure--describe-preset ()
-  "Return `cmake-configure-preset' as protertized transient-variable."
-  (format "Preset (%s)"
-          (propertize (cmake-return-value-or-default cmake-configure-preset "<Unset>")
-                      'face 'transient-value)))
+(defun cmake-configure-execute ()
+  "Execute the currently configured CMake command."
+  (interactive)
+  (message "args: %s" (transient-args transient-current-command)))
 
-;; (defvar cmake-project-cmake-prefix-command "\"C:/Program Files/Microsoft Visual Studio/2022/Community/VC/Auxiliary/Build/vcvarsall.bat\" x64"
-;;   "Command to prefix the call to cmake with.
-;; For instance \"<path>vcvarsall.bat x64\" or \"module load cmake\".")
-
-;; (defvar cmake-preferred-shell "c:/Program Files/Emacs/emacs-29.3_2/libexec/emacs/29.3/x86_64-w64-mingw32/cmdproxy.exe"
-;;   "Preferred shell to execute commands in.")
 
 (transient-define-prefix cmake-configure ()
   "Invoke a CMake configuration step."
@@ -178,33 +167,29 @@
    ("-c" "Make deprecated macro and function warnings errors" "-Werror=deprecated")
    ("-C" "Make deprecated macro and function warnings not errors" "-Wno-error=deprecated")
    ]
-  ;; ["Presets\n"
-  ;;  ("-P" cmake-configure--set-preset
-  ;;   :description cmake-configure--describe-preset)]
   ["Manual configuration\n"
-   ("-S" cmake-configure-set-source-path :transient t
+   ("s" cmake-configure-set-source-path :transient t
     :description cmake-configure--describe-source-path)
-   ("-B" cmake-configure-set-build-path :transient t
+   ("b" cmake-configure-set-build-path :transient t
     :description cmake-configure--describe-build-path)
    ;; ("-D" cmake-configure--set-cache-entris :transient t
    ;;  :description cmake-configure--describe-cache-entries)
    ;; ("-U" cmake-configure--set-remove-cache-entries :transient t
    ;;  :description cmake-configure--describe-remove-cache-entries)
-   ("-G" cmake-configure-set-generator :transient t
+   ("g" cmake-configure-set-generator :transient t
     :description cmake-configure--describe-generator)
-   ("-T" cmake-configure-set-toolset :transient t
+   ("T" cmake-configure-set-toolset :transient t
     :description cmake-configure--describe-toolset)
-   ("-A" cmake-configure-set-platform :transient t
+   ("a" cmake-configure-set-platform :transient t
     :description cmake-configure--describe-platform)
-   ("-t" cmake-configure-set-toolchain-file :transient t
+   ("t" cmake-configure-set-toolchain-file :transient t
     :description cmake-configure--describe-toolchain-file)
-   ("-i" cmake-configure-set-install-prefix :transient t
+   ("i" cmake-configure-set-install-prefix :transient t
     :description cmake-configure--describe-install-prefix)
+   ("x" cmake-configure-execute
+    :description "Execute the current configuration")
    ]
-  ["Presets\n"
-   ("-P" cmake-configure-set-preset :transient t
-    :description cmake-configure--describe-preset)]
   )
 
-(provide 'cmake-configure.el)
+(provide 'cmake-configure)
 ;;; cmake-configure.el ends here

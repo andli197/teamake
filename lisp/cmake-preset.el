@@ -2,6 +2,16 @@
 ;;; Code:
 
 (require 'json)
+(require 'cmake-base)
+(require 'cmake-configure)
+
+(defvar cmake-preset-configuration '()
+  "Selected configuration preset.")
+
+(defvar cmake-preset-build '()
+  "Selected build preset.")
+
+
 
 (defun cmake-presets-get-configuration-preset-objects (source-path)
   "Return the configuration preset objects from SOURCE-PATH."
@@ -92,5 +102,32 @@ non matching."
 ;; (cmake-presets-get-test-presets source-path)
 ;; (cmake-presets--get-preset-type source-path "configurePresets")
 
-(provide 'cmake-presets)
-;;; cmake-presets.el ends here
+(defun cmake-preset-set-configuration-preset (preset)
+  "Set the configuration preet to PRESET."
+  (interactive
+   (list (completing-read "Configuration preset: " (cmake-presets-get-configuration-presets) '() t)))
+  (setq cmake-preset-configuration preset))
+
+(defun cmake-preset-set-build-preset (preset)
+  "Set the configuration preet to PRESET."
+  (interactive
+   (list (completing-read "Configuration preset: " (cmake-presets-get-build-presets ) '() t)))
+  (setq cmake-preset-configuration preset))
+
+
+(transient-define-prefix cmake-preset (source-path)
+  "Handle presets for CMake project."
+  [:description
+   (lambda ()
+     (format "Presets for %s\n  (%s)"
+             (propertize
+              (cmake-project-name cmake-configure-source-path)
+              'face 'transient-heading)
+             cmake-configure-source-path))
+   ("-r" "Read something" "--read=")
+   ]
+  )
+  
+
+(provide 'cmake-preset)
+;;; cmake-preset.el ends here
