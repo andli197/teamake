@@ -3,7 +3,7 @@
 
 (defun cmake-return-value-or-default (variable default-value)
   "Return the value of VARIABLE if it is non empty, otherwise DEFAULT-VALUE."
-  (if (or (string= variable "") (eq variable '()))
+  (if (cmake-variable-not-set variable)
       default-value
     variable))
 
@@ -12,7 +12,7 @@
   (or (eq variable '()) (string= variable "")))
 
 (defun cmake-project-root (&optional source-path)
-  "Return absolute path to project root or SOURCE-PATH.
+  "Return absolute path to project root of SOURCE-PATH.
 
 Look backward for CMakeLists.txt files and return the path to the topmost
 file.  From the selected SOURCE-PATH first locate the dominating CMakeLists.txt

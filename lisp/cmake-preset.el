@@ -153,37 +153,48 @@ non matching."
 ;; Executions
 (defun cmake-preset-execute-configuration-preset ()
   (interactive)
-  (cmake-process-invoke
-   (format "-S=%s --preset=%s"
-           cmake-preset-source-path
-           cmake-preset-configuration)))
+  (cmake-process-invoke-cmake-in-root
+   (cmake-return-value-or-default cmake-preset-source-path '())
+   (format "-S=%s" cmake-preset-source-path)
+   (format "--preset=%s" cmake-preset-configuration)))
 
 (defun cmake-preset-execute-build-preset ()
   (interactive)
-  (cmake-process-invoke
-   (format "-S=%s --build --preset=%s"
-           cmake-preset-source-path
+  (cmake-process-execute
+   (format "--build --preset=%s"
            cmake-preset-build)))
 
-(transient-define-prefix cmake-preset () ;; source-path)
+(defun cmake-preset-arguments ()
+  (transient-args 'cmake-preset))
+
+(transient-define-prefix cmake-preset ()
   "Handle presets for CMake project."
-  [["Source path"
-   ("s" cmake-preset-set-source-path :transient t
-     :description cmake-preset--describe-source-path)
-   ]]
-  [["Configuration"
-    ("c" cmake-preset-set-configuration-preset :transient t
-     :description cmake-preset--describe-configuration-preset)
-    ("C" cmake-preset-execute-configuration-preset :transient t
-     :description "Execute the configuration preset")
-    ]]
-   [["Build"
-    ("b" cmake-preset-set-build-preset :transient t
-    :description cmake-preset--describe-build-preset)
-    ]]
-   
-  ;; (interactive (list (cmake-project-root)))
-  ;; (transient-setup 'cmake-preset '() '() :scope source-path)
+  [:description
+    (lambda ()
+      (propertize (format "Preset for %s"
+                          (if (cmake-variable-not-set cmake-preset-source-path)
+                              "<No cmake project>"
+                            (cmake-project-name cmake-preset-source-path)))
+                  'face 'transient-heading))
+    ["Source path"
+     ("s" cmake-preset-set-source-path :transient t
+      :description cmake-preset--describe-source-path)
+     ]
+    ["Configuration"
+     ("c" cmake-preset-set-configuration-preset :transient t
+      :description cmake-preset--describe-configuration-preset)
+     ("C" cmake-preset-execute-configuration-preset
+      :description "Execute configuration")
+     ]
+    ["Build"
+     ("b" cmake-preset-set-build-preset :transient t
+      :description cmake-preset--describe-build-preset)
+     ("B" cmake-preset-execute-build-preset
+      :description "Execute build")
+     ]
+    ]
+  ;; (interactive (list (call-interactively 'cmake-project-root)))
+  ;; (transient-setup 'cmake-preset '() '() :scope path)
   )
   
 
