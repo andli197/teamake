@@ -1,7 +1,7 @@
 
 ;;; Code:
 
-(require 'cmake-core)
+(require 'cmake-custom)
 (require 'cmake-base)
 
 (defcustom cmake-process-preferred-shell

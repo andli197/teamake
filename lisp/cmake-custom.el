@@ -17,5 +17,5 @@
   "Options for cmake-project buffers."
   :group 'cmake-project)
 
-(provide 'cmake-core)
-;;; cmake-core.el ends here
+(provide 'cmake-custom)
+;;; cmake-custom.el ends here
