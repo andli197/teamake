@@ -17,28 +17,31 @@
 Look backward for CMakeLists.txt files and return the path to the topmost
 file.  From the selected SOURCE-PATH first locate the dominating CMakeLists.txt
 file, then look for CMakeLists.txt files in parent directories.
-This method is not 100% working but good enough for now."
-  (interactive
-   (list (read-directory-name "Select project: " default-directory '() t)))
+This method is only working for projects containing CMakeLists-files throughout
+the project hierarchy but that is a goo enough for now assumption.
 
-  (while (not source-path)
-    (setq source-path (read-directory-name "Select project: " default-directory '() t)))
+If no source-path is provided `default-directory' is used."
+  (interactive (list default-directory))
 
   (let* ((directory (or source-path default-directory))
          (topmost-cmake-file (locate-dominating-file directory "CMakeLists.txt"))
          (candidate topmost-cmake-file))
-    (while (file-exists-p candidate)
+    (while (and candidate (file-exists-p candidate))
       (setq topmost-cmake-file candidate
             directory (file-name-parent-directory (file-name-directory topmost-cmake-file))
             candidate (file-name-concat directory "CMakeLists.txt")))
-    (file-name-directory topmost-cmake-file)))
+
+    (directory-file-name
+     (if topmost-cmake-file
+         (file-name-directory topmost-cmake-file)
+       default-directory))))
 
 (defun cmake-project-name (&optional source-path)
   "Return directory name of the project root or SOURCE-PATH."
   (interactive
    (list (cmake-project-root default-directory)))
 
-  (let ((directory (directory-file-name (cmake-project-root source-path))))
+  (let ((directory (cmake-project-root source-path)))
     (file-relative-name directory (file-name-parent-directory directory))))
 
 (provide 'cmake-base)
