@@ -21,7 +21,7 @@ This method is only working for projects containing CMakeLists-files throughout
 the project hierarchy but that is a goo enough for now assumption.
 
 If no source-path is provided `default-directory' is used."
-  (interactive (list default-directory))
+  (interactive (read-directory-name "Select file within project: " default-directory '() t))
 
   (let* ((directory (or source-path default-directory))
          (topmost-cmake-file (locate-dominating-file directory "CMakeLists.txt"))

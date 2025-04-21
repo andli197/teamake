@@ -6,31 +6,31 @@
 
 (defcustom cmake-process-preferred-shell
   shell-file-name
-  "User preferred shell for executing CMake commands in."
+  "User preferred shell for executing CMake commands in.
+
+Specifically useful if running Emacs on Windows and having another
+`shell-file-name' set than cmdproxy.exe and using VC as compiler since
+it is most useful to call the `vcvars.bat' for setting up the paths.
+
+Defaults to `shell-file-name'"
   :type 'string
   :group 'cmake-project-commands)
 
 (defcustom cmake-process-cmake-executable
-  ""
+  (locate-file "cmake" exec-path exec-suffixes)
   "Location of the cmake executable.
 
-This is typically used for invoking CMake commands that produces an
-output that some transient are ment to present the result of to the user.
 If it is available on PATH this variable is not required to be set."
   :type 'string
   :group 'cmake-project-commands)
 
-(defcustom cmake-process-setup-build-environment
-  ""
-  "Command to setup build environment before calling CMake.
+(defcustom cmake-process-verbose
+  '()
+  "If set to true, the input prompts and commands will be more verbose.
 
-Typically a custom command per project for setting up third party dependencies,
-location of compilers and other resources or, using MSVC, to call the
-`vcvars.bat' before executing configuration or build commands.
-If setting this option to locate `vcvars.bat' you typically also want to
-set `cmake-process-preferred-shell' to where cmdproxy.exe is located in
-your emacs installation."
-  :type 'string
+This does not affect the flags send to the cmake command itself but only
+for the Emacs user interface."
+  :type 'boolean
   :group 'cmake-project-commands)
 
 (defcustom cmake-process-buffer-base-name
@@ -41,13 +41,13 @@ This is used along with the determined project name as process buffer name."
   :type 'string
   :group 'cmake-project-buffers)
 
-(defun cmake-process-start-process (program &optional path &rest args)
-  "Start a process of PROGRAM at PATH with ARGS as a process."
+(defun cmake-process--start-process (program &optional name path &rest args)
+  "Start a process of PROGRAM with NAME at PATH with ARGS as a process."
   (pcase-let* ((shell-file-name cmake-process-preferred-shell)
                (default-directory (or path default-directory))
                (process-buf (cmake-process--get-buffer default-directory))
                (process (apply #'start-file-process
-                               (file-name-nondirectory program)
+                               name
                                process-buf
                                program
                                args)))
@@ -56,20 +56,27 @@ This is used along with the determined project name as process buffer name."
       (goto-char (point-max))
       (set-marker (process-mark process) (point)))
     (pop-to-buffer process-buf)
-    process)
-  )
-
-(defvar cmake-process-command-history '())
+    process))
 
 (defun cmake-process--get-cmake-executable ()
-  "Return the cmake executable path if it is set.
+  "Return the cmake executable path."
+  (let ((cmake-executable "cmake"))
+    (setq cmake-executable
+          (cmake-return-value-or-default cmake-process-cmake-executable cmake-executable))
 
-If the path contains spaces, quotation marks will be padded in front and back."
-  (if (not (string= cmake-process-cmake-executable ""))
-      (if (string-match-p (regexp-quote " ") cmake-process-cmake-executable)
-          (format "\"%s\"" cmake-process-cmake-executable)
-        cmake-process-cmake-executable)
-    "cmake"))
+    (if (not (file-exists-p cmake-executable))
+        (setq cmake-executable (locate-file "cmake" exec-path exec-suffixes t)))
+
+    (unless (and cmake-executable (file-exists-p cmake-executable))
+      (user-error "Unable to locate program cmake"))
+
+    cmake-executable))
+
+(defun quote-if-needed (path)
+  "Return PATH quoted if it contain spaces."
+  (if (string-match-p (regexp-quote " ") path)
+      (format "\"%s\"" path)
+    path))
 
 (defun cmake-process-get-output (command &optional path)
   "Invoke CMake at the project root of PATH with the given COMMAND.
@@ -79,60 +86,83 @@ output from the command.  Not to be used to perform configuration,
 or any build process since it will only invoke cmake by calling
 `cmake-process-cmake-executable'.
 If building or other actions are to be performed, please use
-`cmake-process-invoke-cmake' for those types of actions since it
-will setup the shell using `cmake-process-setup-build-environment'."
+`cmake-process-invoke-cmake' for those types, since output is
+longer."
   (let ((shell-file-name cmake-process-preferred-shell)
         (default-directory (cmake-project-root (or path default-directory)))
         (output (shell-command-to-string
                  (format "%s %s"
-                         (cmake-process--get-cmake-executable)
+                         (quote-if-needed
+                          (cmake-process--get-cmake-executable))
                          command))))
-    (setq output (string-replace "" "" output))
-    output
-    ))
+    (string-replace "" "" output)))
 
-(defun cmake-process--build-command (command)
-  "Append call to `cmake-process-setup-build-environment' before COMMAND.
 
-Create an execution string of `cmake-process-setup-build-environment' and
-COMMAND.  If no build environment setup is configured it will be empty."
-  command)
+(defvar cmake-process--cmake-command-history '("--help"))
 
 (defun cmake-process-invoke-cmake (&optional path &rest args)
   "Start processing a CMake command in PATH with ARGS."
-  (apply #'cmake-process-start-process
-         (cmake-process--build-command cmake-process-cmake-executable)
-         path
-         args))
+  (interactive
+   (let* ((path default-directory)
+          (cmake-arguments (cmake-process--prompt-user-for-command
+                            "cmake " path (car cmake-process--cmake-command-history))))
+     (seq-concatenate 'list (list path) cmake-arguments)))
+
+  (let ((cmake-executable (cmake-process--get-cmake-executable)))
+    (apply #'cmake-process--start-process
+           cmake-executable
+           (file-name-nondirectory cmake-executable)
+           path
+           args)))
 
 (defun cmake-process-invoke-cmake-in-root (&optional path &rest args)
   "Start processing a CMake command in project root for PATH with ARGS."
+  (interactive
+   (let* ((path (cmake-project-root default-directory))
+          (cmake-arguments (cmake-process--prompt-user-for-command
+                            "cmake " path (car cmake-process--cmake-command-history))))
+     (seq-concatenate 'list (list path) cmake-arguments)))
+
   (apply #'cmake-process-invoke-cmake
          (cmake-project-root path)
-         args))
+         args)
+  )
+
+(defvar cmake-process--user-command-history '(""))
 
 (defun cmake-process-invoke-command (command &optional path &rest args)
   "Start processing COMMAND in PATH with ARGS."
-  (apply #'cmake-process-start-process
-         (cmake-process--build-command command)
+  (interactive
+   (let* ((path default-directory)
+          (command (read-string "Command: " (car cmake-process--user-command-history) 'cmake-process--user-command-history))
+          (arguments (cmake-process--prompt-user-for-command
+                      (file-name-nondirectory command) path 'cmake-process--user-command-history)))
+     (seq-concatenate 'list (list path) command)))
+  
+  (apply #'cmake-process--start-process
+         (file-name-nondirectory command)
+         (quote-if-needed command)
          source-path
          args))
 
 (defun cmake-process-invoke-command-in-root (command &optional path &rest args)
   "Start processing COMMAND in project root for PATH with ARGS."
   (apply #'cmake-process-invoke-command
-         command
          (cmake-project-root path)
          args))
 
-;; (defun cmake-process-read-shell-command (&optional initial-input)
-;;   "Prompt for command to be executed with INITIAL-INPUT as default command."
-;;   (let ((root (cmake-process-root)))
-;;   (while (cmake-process-root)
-;;     (call-interactively 'cmake-process-set-source-path))
+(defun cmake-process--prompt-user-for-command (prompt &optional path initial-input)
+  "PROMPT for command to be executed at PATH with INITIAL-INPUT as default command.
 
-;;   (let ((default-directory (cmake-process-root)))
-;;     (read-shell-command "Async shell command: " initial-input 'cmake-process-command-history))))
+The output from this command is splitting the user input on \" \" since it is designed
+to be used as input for commands as &rest args types of input.  This means that user
+cannot input \" \"."
+  (let ((full-prompt
+         (if cmake-process-verbose
+             (format "(%s) %s " path (string-trim prompt))
+           prompt)))
+    (split-string (read-string full-prompt initial-input 'cmake-process--cmake-command-history) " " t)))
+
 
 (defun cmake-process--get-buffer (source-path)
   "Create or return the existing process buffer for SOURCE-PATH."
