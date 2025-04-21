@@ -105,7 +105,7 @@ longer."
   (interactive
    (let* ((path default-directory)
           (cmake-arguments (cmake-process--prompt-user-for-command
-                            "cmake " path (car cmake-process--cmake-command-history))))
+                            "cmake " path 'cmake-process--cmake-command-history)))
      (seq-concatenate 'list (list path) cmake-arguments)))
 
   (let ((cmake-executable (cmake-process--get-cmake-executable)))
@@ -120,7 +120,7 @@ longer."
   (interactive
    (let* ((path (cmake-project-root default-directory))
           (cmake-arguments (cmake-process--prompt-user-for-command
-                            "cmake " path (car cmake-process--cmake-command-history))))
+                            "cmake " path 'cmake-process--cmake-command-history)))
      (seq-concatenate 'list (list path) cmake-arguments)))
 
   (apply #'cmake-process-invoke-cmake
@@ -128,40 +128,57 @@ longer."
          args)
   )
 
-(defvar cmake-process--user-command-history '(""))
+(defvar cmake-process--user-command-history '())
+(defvar cmake-process--user-command-arguments-history '())
 
 (defun cmake-process-invoke-command (command &optional path &rest args)
   "Start processing COMMAND in PATH with ARGS."
   (interactive
    (let* ((path default-directory)
-          (command (read-string "Command: " (car cmake-process--user-command-history) 'cmake-process--user-command-history))
+          (command (cmake-process--prompt-user-for-command
+                    "Command" path 'cmake-process--user-command-history t))
           (arguments (cmake-process--prompt-user-for-command
-                      (file-name-nondirectory command) path 'cmake-process--user-command-history)))
-     (seq-concatenate 'list (list path) command)))
+                      (file-name-nondirectory command)
+                      path
+                      'cmake-process--user-command-arguments-history)))
+     (seq-concatenate 'list (list command path) arguments)))
   
   (apply #'cmake-process--start-process
+         command
          (file-name-nondirectory command)
-         (quote-if-needed command)
-         source-path
+         path
          args))
 
 (defun cmake-process-invoke-command-in-root (command &optional path &rest args)
   "Start processing COMMAND in project root for PATH with ARGS."
+  (interactive
+   (let* ((path (cmake-project-root default-directory))
+          (command (cmake-process--prompt-user-for-command
+                    "Command" path 'cmake-process--user-command-history t))
+          (arguments (cmake-process--prompt-user-for-command
+                      (file-name-nondirectory command)
+                      path
+                      'cmake-process--user-command-arguments-history)))
+     (seq-concatenate 'list (list command path) arguments)))
+
   (apply #'cmake-process-invoke-command
+         command
          (cmake-project-root path)
          args))
 
-(defun cmake-process--prompt-user-for-command (prompt &optional path initial-input)
-  "PROMPT for command to be executed at PATH with INITIAL-INPUT as default command.
+(defun cmake-process--prompt-user-for-command (prompt &optional path history single-output)
+  "PROMPT for command to be executed at PATH with HISTORY.
 
-The output from this command is splitting the user input on \" \" since it is designed
-to be used as input for commands as &rest args types of input.  This means that user
-cannot input \" \"."
-  (let ((full-prompt
-         (if cmake-process-verbose
-             (format "(%s) %s " path (string-trim prompt))
-           prompt)))
-    (split-string (read-string full-prompt initial-input 'cmake-process--cmake-command-history) " " t)))
+If SINGLE-OUTPUT is used, only the first output before \" \" is output.
+Otherwise the result is split on \" \" and returned as a list."
+  (let* ((full-prompt
+          (if cmake-process-verbose
+              (format "%s: %s " path (string-trim prompt))
+            (format "%s " (string-trim prompt))))
+         (result (read-string full-prompt (or (car (eval history)) "") history)))
+    (if single-output
+        result
+      (split-string result " " t))))
 
 
 (defun cmake-process--get-buffer (source-path)
