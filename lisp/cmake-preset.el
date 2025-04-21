@@ -13,6 +13,9 @@
 (defvar cmake-preset-build ""
   "Selected build preset.")
 
+(defvar cmake-preset-test ""
+  "Selected test preset.")
+
 ;; Utility functions
 
 (defun cmake-presets-get-configuration-preset-objects (source-path)
@@ -124,7 +127,23 @@ non matching."
   (let ((args (cmake-preset-arguments)))
     (if (seq-contains-p args "-x" 'string=)
         (cmake-preset--execute-build source-path))))
-  
+
+(defun cmake-preset-set-test-preset (source-path preset)
+  "Set the test preset to PRESET."
+  (interactive
+   (let* ((source-path (cmake-project-root default-directory))
+          (preset (completing-read "Test preset: "
+                                   (cmake-presets-get-test-presets
+                                    source-path
+                                    cmake-preset-configuration)
+                                   '()
+                                   t)))
+     (list source-path preset)))
+
+  (setq cmake-preset-test preset)
+  (let ((args (cmake-preset-arguments)))
+    (if (seq-contains-p args "-x" 'string=)
+        (cmake-preset--execute-test source-path))))
 
 ;; Descriptions
 
@@ -136,6 +155,9 @@ non matching."
   (format "Build (%s)"
           (propertize cmake-preset-build 'face 'transient-value)))
 
+(defun cmake-preset--describe-test-preset ()
+  (format "Test (%s)"
+          (propertize cmake-preset-test 'face 'transient-value)))
 
 ;; Executions
 (defun cmake-preset--execute-configuration (source-path)
@@ -156,6 +178,15 @@ non matching."
    "--build"
    (format "--preset=%s" cmake-preset-build)))
 
+(defun cmake-preset--execute-test (source-path)
+  (interactive
+   (let ((source-path (cmake-project-root default-directory)))
+     (list source-path)))
+  (cmake-process-invoke-command-in-root
+   "ctest"
+   source-path
+   (format "--preset=%s" cmake-preset-test)))
+
 (defun cmake-preset-arguments ()
   (transient-args 'cmake-preset))
 
@@ -167,7 +198,9 @@ non matching."
      ("c" cmake-preset-set-configuration-preset :transient t
       :description cmake-preset--describe-configuration-preset)
      ("b" cmake-preset-set-build-preset :transient t
-      :description cmake-preset--describe-build-preset)]
+      :description cmake-preset--describe-build-preset)
+     ("t" cmake-preset-set-test-preset :transient t
+      :description cmake-preset--describe-test-preset)]
   ["Execute\n"
    ("C" cmake-preset--execute-configuration :transient t
     :description
@@ -178,7 +211,13 @@ non matching."
     :description
     (lambda ()
       (format "Build %s"
-              (propertize cmake-preset-build 'face 'transient-value))))]
+              (propertize cmake-preset-build 'face 'transient-value))))
+   ("T" cmake-preset--execute-test :transient t
+    :description
+    (lambda ()
+      (format "Test %s"
+              (propertize cmake-preset-test 'face 'transient-value))))
+   ]
   ["Flags"
    ("x" "Execute preset after selection" "-x")]
   (interactive (list (cmake-project-root default-directory)))
