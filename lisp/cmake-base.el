@@ -1,6 +1,8 @@
 
 ;;; Code:
 
+(require 'cmake-faces)
+
 (defun cmake-return-value-or-default (variable default-value)
   "Return the value of VARIABLE if it is non empty, otherwise DEFAULT-VALUE."
   (if (cmake-variable-not-set variable)
@@ -43,6 +45,17 @@ If no source-path is provided `default-directory' is used."
 
   (let ((directory (cmake-project-root source-path)))
     (file-relative-name directory (file-name-parent-directory directory))))
+
+(defun cmake-project-heading (heading-text source-path)
+  "Return a propertized heading from HEADING-TEXT and SOURCE-PATH as CMake project."
+  (concat (format "%s " (propertize heading-text 'face 'cmake-project-heading))
+          (cmake-project-propertized source-path)
+          "\n"))
+
+(defun cmake-project-propertized (source-path)
+  "Return a propertized information about SOURCE-PATH as CMake project."
+  (concat (propertize (cmake-project-name source-path) 'face 'cmake-project-name)
+          (format " (%s)" (propertize source-path 'face 'cmake-project-path))))
 
 (provide 'cmake-base)
 ;;; cmake-base.el ends here

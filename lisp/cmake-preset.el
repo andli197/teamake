@@ -3,12 +3,9 @@
 
 (require 'json)
 (require 'cmake-base)
-(require 'cmake-configure)
+(require 'cmake-process)
 
 ;; Variables
-
-(defvar cmake-preset-source-path ""
-  "Selected source path.")
 
 (defvar cmake-preset-configuration ""
   "Selected configuration preset.")
@@ -96,50 +93,40 @@ non matching."
       (if (not no-error)
           (user-error "Missing \"%s\" element in json object" name)))))
 
-;; (setq source-path "c:/Arbetsfiler/Andreas/project/chess/chess/")
-;; (cmake-presets-get-configuration-preset-objects source-path)
-;; (cmake-presets-get-configuration-presets source-path)
-;; (cmake-presets-get-build-preset-objects source-path)
-;; (cmake-presets-get-build-presets source-path)
-;; (cmake-presets--get-preset-type-objects source-path "buildPresets" "First-configure-preset")
-;; (cmake-presets-get-build-preset-objects source-path "First-configure-preset")
-;; (cmake-presets-get-build-presets source-path "First-configure-preset")
-;; (cmake-presets-get-test-presets source-path)
-;; (cmake-presets--get-preset-type source-path "configurePresets")
-
 ;; Setters
 
-(defun cmake-preset-set-source-path (source-path)
-  "Set the source path to read presets from."
-  (interactive
-   (list (call-interactively 'cmake-project-root default-directory)))
-  (setq cmake-preset-source-path source-path))
-
-(defun cmake-preset-set-configuration-preset (preset &optional source-path)
+(defun cmake-preset-set-configuration-preset (source-path preset)
   "Set the configuration preset to PRESET."
   (interactive
-   (list (completing-read "Configuration preset: "
-                          (cmake-presets-get-configuration-presets
-                           cmake-preset-source-path)
-                          '() t)))
-  (setq cmake-preset-configuration preset))
+   (let* ((source-path (cmake-project-root default-directory))
+          (preset (completing-read "Configuration preset: "
+                                   (cmake-presets-get-configuration-presets source-path)
+                                   '()
+                                   t)))
+     (list source-path preset)))
+  (setq cmake-preset-configuration preset)
+  (let ((args (cmake-preset-arguments)))
+    (if (seq-contains-p args "-x" 'string=)
+        (cmake-preset--execute-configuration source-path))))
 
-(defun cmake-preset-set-build-preset (preset &optional source-path)
+(defun cmake-preset-set-build-preset (source-path preset)
   "Set the build preset to PRESET."
   (interactive
-   (list (completing-read "Build preset: "
-                          (cmake-presets-get-build-presets
-                           cmake-preset-source-path
-                           cmake-preset-configuration)
-                          '() t)))
-  (setq cmake-preset-build preset))
+   (let* ((source-path (cmake-project-root default-directory))
+          (preset (completing-read "Build preset: "
+                                   (cmake-presets-get-build-presets
+                                    source-path
+                                    cmake-preset-configuration)
+                                   '()
+                                   t)))
+     (list source-path preset)))
+  (setq cmake-preset-build preset)
+  (let ((args (cmake-preset-arguments)))
+    (if (seq-contains-p args "-x" 'string=)
+        (cmake-preset--execute-build source-path))))
+  
 
 ;; Descriptions
-
-(defun cmake-preset--describe-source-path ()
-  "Set the source path to read presets from."
-  (format "Source path (%s)"
-          (propertize cmake-preset-source-path 'face 'transient-value)))
 
 (defun cmake-preset--describe-configuration-preset ()
   (format "Configuration (%s)"
@@ -151,52 +138,54 @@ non matching."
 
 
 ;; Executions
-(defun cmake-preset-execute-configuration-preset ()
-  (interactive)
+(defun cmake-preset--execute-configuration (source-path)
+  (interactive
+   (let ((source-path (cmake-project-root default-directory)))
+     (list source-path)))
   (cmake-process-invoke-cmake-in-root
-   (cmake-return-value-or-default cmake-preset-source-path '())
-   (format "-S=%s" cmake-preset-source-path)
+   source-path
+   (format "-S=%s" source-path)
    (format "--preset=%s" cmake-preset-configuration)))
 
-(defun cmake-preset-execute-build-preset ()
-  (interactive)
-  (cmake-process-execute
-   (format "--build --preset=%s"
-           cmake-preset-build)))
+(defun cmake-preset--execute-build (source-path)
+  (interactive
+   (let ((source-path (cmake-project-root default-directory)))
+     (list source-path)))
+  (cmake-process-invoke-cmake-in-root
+   source-path
+   "--build"
+   (format "--preset=%s" cmake-preset-build)))
 
 (defun cmake-preset-arguments ()
   (transient-args 'cmake-preset))
 
-(transient-define-prefix cmake-preset ()
+(transient-define-prefix cmake-preset (source-path)
   "Handle presets for CMake project."
   [:description
-    (lambda ()
-      (propertize (format "Preset for %s"
-                          (if (cmake-variable-not-set cmake-preset-source-path)
-                              "<No cmake project>"
-                            (cmake-project-name cmake-preset-source-path)))
-                  'face 'transient-heading))
-    ["Source path"
-     ("s" cmake-preset-set-source-path :transient t
-      :description cmake-preset--describe-source-path)
-     ]
-    ["Configuration"
+   (lambda ()
+     (cmake-project-heading "Presets for" (transient-scope)))
      ("c" cmake-preset-set-configuration-preset :transient t
       :description cmake-preset--describe-configuration-preset)
-     ("C" cmake-preset-execute-configuration-preset
-      :description "Execute configuration")
-     ]
-    ["Build"
      ("b" cmake-preset-set-build-preset :transient t
-      :description cmake-preset--describe-build-preset)
-     ("B" cmake-preset-execute-build-preset
-      :description "Execute build")
-     ]
-    ]
-  ;; (interactive (list (call-interactively 'cmake-project-root)))
-  ;; (transient-setup 'cmake-preset '() '() :scope path)
+      :description cmake-preset--describe-build-preset)]
+  ["Execute\n"
+   ("C" cmake-preset--execute-configuration :transient t
+    :description
+    (lambda ()
+      (format "Configure %s"
+              (propertize cmake-preset-configuration 'face 'transient-value))))
+   ("B" cmake-preset--execute-build :transient t
+    :description
+    (lambda ()
+      (format "Build %s"
+              (propertize cmake-preset-build 'face 'transient-value))))]
+  ["Flags"
+   ("x" "Execute preset after selection" "-x")]
+  (interactive (list (cmake-project-root default-directory)))
+  (transient-setup 'cmake-preset '() '() :scope source-path)
   )
-  
+
+
 
 (provide 'cmake-preset)
 ;;; cmake-preset.el ends here

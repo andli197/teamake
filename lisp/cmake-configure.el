@@ -40,10 +40,6 @@
 ;;   ;; :argument-regexp "\\(DCMAKE_BUILD_TYPE\\(grape\\|orange\\|cherry\\|lime\\)-snowcone\\)"
 ;;   :choices '("Debug" "Release" "RelWithDebInfo"))
 
-
-(defvar cmake-configure-preset ""
-  "Current selected preset.")
-
 (defun cmake-configure-set-source-path (path)
   "Set `cmake-configure-source-path' to PATH."
   (interactive
@@ -153,22 +149,11 @@
   (message "args: %s" (transient-args transient-current-command)))
 
 
-(transient-define-prefix cmake-configure ()
+(transient-define-prefix cmake-configure (code-path)
   "Invoke a CMake configuration step."
-  ["Flags\n"
-   ("-f" "Create a fresh build tree, remove any pre-existing cache file" "--fresh")
-   ("-w" "Enable developer warnings" "-Wdev")
-   ("-W" "Suppress developer warnings" "-Wno-dev")
-   ("-e" "Make developer warnings errors." "-Werror=dev")
-   ("-E" "Make developer warnings not errors." "-Wno-error=dev")
-   ("-d" "Enable deprecation warnings" "-Wdeprecated")
-   ("-D" "Suppress deprecation warnings" "-Wno-deprecated")
-   ("-c" "Make deprecated macro and function warnings errors" "-Werror=deprecated")
-   ("-C" "Make deprecated macro and function warnings not errors" "-Wno-error=deprecated")
-   ]
-  ["Manual configuration\n"
-   ("s" cmake-configure-set-source-path :transient t
-    :description cmake-configure--describe-source-path)
+  [:description
+   (lambda ()
+     (cmake-project-heading "Configure " (transient-scope)))
    ("b" cmake-configure-set-build-path :transient t
     :description cmake-configure--describe-build-path)
    ;; ("-D" cmake-configure--set-cache-entris :transient t
@@ -188,6 +173,20 @@
    ("x" cmake-configure-execute
     :description "Execute the current configuration")
    ]
+  ["Flags\n"
+   ("-f" "Create a fresh build tree, remove any pre-existing cache file" "--fresh")
+   ("-w" "Enable developer warnings" "-Wdev")
+   ("-W" "Suppress developer warnings" "-Wno-dev")
+   ("-e" "Make developer warnings errors." "-Werror=dev")
+   ("-E" "Make developer warnings not errors." "-Wno-error=dev")
+   ("-d" "Enable deprecation warnings" "-Wdeprecated")
+   ("-D" "Suppress deprecation warnings" "-Wno-deprecated")
+   ("-c" "Make deprecated macro and function warnings errors" "-Werror=deprecated")
+   ("-C" "Make deprecated macro and function warnings not errors" "-Wno-error=deprecated")
+   ]
+
+  (interactive (list (cmake-project-root default-directory)))
+  (transient-setup 'cmake-configure '() '() :scope code-path)
   )
 
 (provide 'cmake-configure)
