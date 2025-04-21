@@ -98,14 +98,12 @@ target in the build tree."
   "Describe execution."
   (format "Invoke CMake with the current configuration"))
 
-(transient-define-prefix cmake-build ()
+(transient-define-prefix cmake-build (source-path)
   "Invoke a build command on an already existing configuration."
   ["Flags and switches"
    ;; ("-r" "Read available build targets" "-r")
    ("-c" "Build clean before actual target" "--clean-first")
    ("-v" "Verbose output" "--verbose")
-   ("-a" "test infix" "--choice=" :choices (foo bar baz))
-   ("-A" "switch with shortarg" ("-w" "--switch-short"))
    ]
   ["CMake build"
    ("b" cmake-build-set-build-path :transient t
@@ -120,17 +118,12 @@ target in the build tree."
   ["Execute"
    ("x" cmake-build-execute-build
     :description cmake-build--describe-execute-build)
-   ])
+   ]
+  (interactive (list (cmake-project-root default-directory)))
+  (transient-setup 'cmake-build '() '() :scope source-path)
+  )
 
 (setq debug-on-error '())
-
-(defun force-debug (func &rest args)
-  (condition-case e
-      (apply func args)
-    ((debug error) (signal (car e) (cdr e)))))
-
-(advice-add #'vertico--exhibit :around #'force-debug)
-
 
 (provide 'cmake-build.el)
 ;;; cmake-build.el ends here
