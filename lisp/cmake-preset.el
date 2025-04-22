@@ -101,7 +101,7 @@ non matching."
 (defun cmake-preset-set-configuration-preset (source-path preset)
   "Set the configuration preset to PRESET."
   (interactive
-   (let* ((source-path (cmake-project-root default-directory))
+   (let* ((source-path (cmake-project-code-root default-directory))
           (preset (completing-read "Configuration preset: "
                                    (cmake-presets-get-configuration-presets source-path)
                                    '()
@@ -115,7 +115,7 @@ non matching."
 (defun cmake-preset-set-build-preset (source-path preset)
   "Set the build preset to PRESET."
   (interactive
-   (let* ((source-path (cmake-project-root default-directory))
+   (let* ((source-path (cmake-project-code-root default-directory))
           (preset (completing-read "Build preset: "
                                    (cmake-presets-get-build-presets
                                     source-path
@@ -131,7 +131,7 @@ non matching."
 (defun cmake-preset-set-test-preset (source-path preset)
   "Set the test preset to PRESET."
   (interactive
-   (let* ((source-path (cmake-project-root default-directory))
+   (let* ((source-path (cmake-project-code-root default-directory))
           (preset (completing-read "Test preset: "
                                    (cmake-presets-get-test-presets
                                     source-path
@@ -162,7 +162,7 @@ non matching."
 ;; Executions
 (defun cmake-preset--execute-configuration (source-path)
   (interactive
-   (let ((source-path (cmake-project-root default-directory)))
+   (let ((source-path (cmake-project-code-root default-directory)))
      (list source-path)))
   (cmake-process-invoke-cmake-in-root
    source-path
@@ -171,7 +171,7 @@ non matching."
 
 (defun cmake-preset--execute-build (source-path)
   (interactive
-   (let ((source-path (cmake-project-root default-directory)))
+   (let ((source-path (cmake-project-code-root default-directory)))
      (list source-path)))
   (cmake-process-invoke-cmake-in-root
    source-path
@@ -180,7 +180,7 @@ non matching."
 
 (defun cmake-preset--execute-test (source-path)
   (interactive
-   (let ((source-path (cmake-project-root default-directory)))
+   (let ((source-path (cmake-project-code-root default-directory)))
      (list source-path)))
   (cmake-process-invoke-command-in-root
    "ctest"
@@ -194,7 +194,7 @@ non matching."
   "Handle presets for CMake project."
   [:description
    (lambda ()
-     (cmake-project-heading "Presets for" (transient-scope)))
+     (cmake-project--heading-code-tree "Presets for" (transient-scope)))
      ("c" cmake-preset-set-configuration-preset :transient t
       :description cmake-preset--describe-configuration-preset)
      ("b" cmake-preset-set-build-preset :transient t
@@ -220,7 +220,7 @@ non matching."
    ]
   ["Flags"
    ("x" "Execute preset after selection" "-x")]
-  (interactive (list (cmake-project-root default-directory)))
+  (interactive (list (cmake-project-code-root default-directory)))
   (transient-setup 'cmake-preset '() '() :scope source-path)
   )
 

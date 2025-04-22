@@ -89,7 +89,7 @@ If building or other actions are to be performed, please use
 `cmake-process-invoke-cmake' for those types, since output is
 longer."
   (let ((shell-file-name cmake-process-preferred-shell)
-        (default-directory (cmake-project-root (or path default-directory)))
+        (default-directory (cmake-project-code-root (or path default-directory)))
         (output (shell-command-to-string
                  (format "%s %s"
                          (quote-if-needed
@@ -118,13 +118,13 @@ longer."
 (defun cmake-process-invoke-cmake-in-root (&optional path &rest args)
   "Start processing a CMake command in project root for PATH with ARGS."
   (interactive
-   (let* ((path (cmake-project-root default-directory))
+   (let* ((path (cmake-project-code-root default-directory))
           (cmake-arguments (cmake-process--prompt-user-for-command
                             "cmake " path 'cmake-process--cmake-command-history)))
      (seq-concatenate 'list (list path) cmake-arguments)))
 
   (apply #'cmake-process-invoke-cmake
-         (cmake-project-root path)
+         (cmake-project-code-root path)
          args)
   )
 
@@ -152,7 +152,7 @@ longer."
 (defun cmake-process-invoke-command-in-root (command &optional path &rest args)
   "Start processing COMMAND in project root for PATH with ARGS."
   (interactive
-   (let* ((path (cmake-project-root default-directory))
+   (let* ((path (cmake-project-code-root default-directory))
           (command (cmake-process--prompt-user-for-command
                     "Command" path 'cmake-process--user-command-history t))
           (arguments (cmake-process--prompt-user-for-command
@@ -163,7 +163,7 @@ longer."
 
   (apply #'cmake-process-invoke-command
          command
-         (cmake-project-root path)
+         (cmake-project-code-root path)
          args))
 
 (defun cmake-process--prompt-user-for-command (prompt &optional path history single-output)
@@ -187,7 +187,7 @@ Otherwise the result is split on \" \" and returned as a list."
   (let ((buffer (get-buffer-create
                  (format "*%s: %s*"
                          cmake-process-buffer-base-name
-                         (cmake-project-name source-path)))))
+                         (cmake-project--name-from-code-tree source-path)))))
     (with-current-buffer buffer
       (compilation-mode)
       (read-only-mode t))

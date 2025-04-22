@@ -10,7 +10,7 @@
 (defvar cmake-build-target ""
   "The current build target.")
 
-(defvar cmake-build-parallel ""
+(defvar cmake-build-parallel '()
   "The amount of parallel compilations.")
 
 (defvar cmake-build-config ""
@@ -84,9 +84,9 @@ target in the build tree."
 
 (defun cmake-build--describe-parallel ()
   "Describe the build path."
-  (if (or (string= cmake-build-parallel "") (eq cmake-build-parallel '()))
+  (if (eq cmake-build-parallel '())
       (format "Parallel (%s)" (propertize "<$env{CMAKE_BUILD_PARALLEL_LEVEL}>" 'face 'transient-value))
-    (format "Parallel (%s)" (propertize cmake-build-parallel 'face 'transient-value))))
+    (format "Parallel (%s)" (propertize (number-to-string cmake-build-parallel) 'face 'transient-value))))
 
 (defun cmake-build--describe-config ()
   "Describe the build path."
@@ -98,10 +98,14 @@ target in the build tree."
   "Describe execution."
   (format "Invoke CMake with the current configuration"))
 
-(transient-define-prefix cmake-build (source-path)
+(transient-define-prefix cmake-build (build-path)
   "Invoke a build command on an already existing configuration."
+  [:description
+   (lambda ()
+     (cmake-project--build-tree-heading "Build" build-path))
+   ("-r" "Read available build targets" "-r")
+   ]
   ["Flags and switches"
-   ;; ("-r" "Read available build targets" "-r")
    ("-c" "Build clean before actual target" "--clean-first")
    ("-v" "Verbose output" "--verbose")
    ]
@@ -119,8 +123,8 @@ target in the build tree."
    ("x" cmake-build-execute-build
     :description cmake-build--describe-execute-build)
    ]
-  (interactive (list (cmake-project-root default-directory)))
-  (transient-setup 'cmake-build '() '() :scope source-path)
+  (interactive (list (call-interactively 'cmake-project-build-root)))
+  (transient-setup 'cmake-build '() '() :scope build-path)
   )
 
 (setq debug-on-error '())

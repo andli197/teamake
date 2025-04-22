@@ -43,7 +43,7 @@
 (defun cmake-configure-set-source-path (path)
   "Set `cmake-configure-source-path' to PATH."
   (interactive
-   (list (call-interactively 'cmake-project-root)))
+   (list (call-interactively 'cmake-project-code-root)))
 
   (if (not (file-exists-p (file-name-concat path "CMakeLists.txt")))
       (user-error "Selected path does not contain a CMakeLists.txt file and cannot be used as source path"))
@@ -153,7 +153,7 @@
   "Invoke a CMake configuration step."
   [:description
    (lambda ()
-     (cmake-project-heading "Configure " (transient-scope)))
+     (cmake-project--code-tree-heading "Configure " (transient-scope)))
    ("b" cmake-configure-set-build-path :transient t
     :description cmake-configure--describe-build-path)
    ;; ("-D" cmake-configure--set-cache-entris :transient t
@@ -185,7 +185,7 @@
    ("-C" "Make deprecated macro and function warnings not errors" "-Wno-error=deprecated")
    ]
 
-  (interactive (list (cmake-project-root default-directory)))
+  (interactive (list (call-interactively 'cmake-project-code-root)))
   (transient-setup 'cmake-configure '() '() :scope code-path)
   )
 
