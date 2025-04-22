@@ -22,5 +22,5 @@
   (transient-setup 'cmake-dispatch '() '() :scope source-path)
   )
 
-(provide 'cmake.el)
-;;; cmake.el ends here
+(provide 'cmake-dispatch)
+;;; cmake-dispatch.el ends here
