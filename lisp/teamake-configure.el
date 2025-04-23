@@ -43,7 +43,7 @@
 (defun teamake-configure-set-source-path (path)
   "Set `teamake-configure-source-path' to PATH."
   (interactive
-   (list (call-interactively 'teamake-project-code-root)))
+   (list (call-interactively 'teamake-code-root)))
 
   (if (not (file-exists-p (file-name-concat path "TeamakeLists.txt")))
       (user-error "Selected path does not contain a TeamakeLists.txt file and cannot be used as source path"))
@@ -161,7 +161,7 @@
   "Invoke a Teamake configuration step."
   [:description
    (lambda ()
-     (teamake-project--code-tree-heading "Configure " (transient-scope)))
+     (teamake--code-tree-heading "Configure " (transient-scope)))
    ("b" teamake-configure-set-build-path :transient t
     :description teamake-configure--describe-build-path)
    ("c" teamake-configure-manage-cache-variables
@@ -196,7 +196,7 @@
    ("-C" "Make deprecated macro and function warnings not errors" "-Wno-error=deprecated")
    ]
 
-  (interactive (list (teamake-project-code-root)))
+  (interactive (list (teamake-code-root)))
   (transient-setup 'teamake-configure '() '() :scope code-path)
   )
 

@@ -1,21 +1,21 @@
 
 ;;; Code:
 
-(defgroup teamake-project '()
+(defgroup teamake '()
   "Teamake integration in Emacs using 'transient."
   :group 'tools)
 
-(defgroup teamake-project-misc '()
+(defgroup teamake-misc '()
   "Misc Teamake project options."
-  :group 'teamake-project)
+  :group 'teamake)
 
-(defgroup teamake-project-commands '()
+(defgroup teamake-commands '()
   "Options for controlling the behavior of configurable commands."
-  :group 'teamake-project)
+  :group 'teamake)
 
-(defgroup teamake-project-buffers '()
-  "Options for teamake-project buffers."
-  :group 'teamake-project)
+(defgroup teamake-buffers '()
+  "Options for teamake buffers."
+  :group 'teamake)
 
 (provide 'teamake-custom)
 ;;; teamake-custom.el ends here

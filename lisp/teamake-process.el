@@ -14,7 +14,7 @@ it is most useful to call the `vcvars.bat' for setting up the paths.
 
 Defaults to `shell-file-name'"
   :type 'string
-  :group 'teamake-project-commands)
+  :group 'teamake-commands)
 
 (defcustom teamake-process-teamake-executable
   (locate-file "teamake" exec-path exec-suffixes)
@@ -22,7 +22,7 @@ Defaults to `shell-file-name'"
 
 If it is available on PATH this variable is not required to be set."
   :type 'string
-  :group 'teamake-project-commands)
+  :group 'teamake-commands)
 
 (defcustom teamake-process-verbose
   '()
@@ -31,15 +31,15 @@ If it is available on PATH this variable is not required to be set."
 This does not affect the flags send to the teamake command itself but only
 for the Emacs user interface."
   :type 'boolean
-  :group 'teamake-project-commands)
+  :group 'teamake-commands)
 
 (defcustom teamake-process-buffer-base-name
-  "Teamake project"
-  "Base name of buffers created by `teamake-project'.
+  "TEAMake"
+  "Base name of buffers created by `teamake'.
 
 This is used along with the determined project name as process buffer name."
   :type 'string
-  :group 'teamake-project-buffers)
+  :group 'teamake-buffers)
 
 (defun teamake-process--start-process (program &optional name path &rest args)
   "Start a process of PROGRAM with NAME at PATH with ARGS as a process."
@@ -60,15 +60,15 @@ This is used along with the determined project name as process buffer name."
 
 (defun teamake-process--get-teamake-executable ()
   "Return the teamake executable path."
-  (let ((teamake-executable "teamake"))
+  (let ((teamake-executable "cmake"))
     (setq teamake-executable
           (teamake-return-value-or-default teamake-process-teamake-executable teamake-executable))
 
     (if (not (file-exists-p teamake-executable))
-        (setq teamake-executable (locate-file "teamake" exec-path exec-suffixes t)))
+        (setq teamake-executable (locate-file "cmake" exec-path exec-suffixes t)))
 
     (unless (and teamake-executable (file-exists-p teamake-executable))
-      (user-error "Unable to locate program teamake"))
+      (user-error "Unable to locate program cmake"))
 
     teamake-executable))
 
@@ -89,7 +89,7 @@ If building or other actions are to be performed, please use
 `teamake-process-invoke-teamake' for those types, since output is
 longer."
   (let ((shell-file-name teamake-process-preferred-shell)
-        (default-directory (teamake-project-code-root (or path default-directory)))
+        (default-directory (teamake-code-root (or path default-directory)))
         (output (shell-command-to-string
                  (format "%s %s"
                          (quote-if-needed
@@ -118,26 +118,26 @@ longer."
 (defun teamake-process-invoke-teamake-in-root (&optional path &rest args)
   "Start processing a Teamake command in code root for PATH with ARGS."
   (interactive
-   (let* ((path (teamake-project-code-root default-directory))
+   (let* ((path (teamake-code-root default-directory))
           (teamake-arguments (teamake-process--prompt-user-for-command
                             "teamake " path 'teamake-process--teamake-command-history)))
      (seq-concatenate 'list (list path) teamake-arguments)))
 
   (apply #'teamake-process-invoke-teamake
-         (teamake-project-code-root path)
+         (teamake-code-root path)
          args)
   )
 
 (defun teamake-process-invoke-teamake-in-build-root (&optional path &rest args)
   "Start processing a Teamake command in build root for PATH with ARGS."
   (interactive
-   (let* ((path (teamake-project-build-root default-directory))
+   (let* ((path (teamake-build-root default-directory))
           (teamake-arguments (teamake-process--prompt-user-for-command
                             "teamake " path 'teamake-process--teamake-command-history)))
      (seq-concatenate 'list (list path) teamake-arguments)))
 
   (apply #'teamake-process-invoke-teamake
-         (teamake-project-build-root path)
+         (teamake-build-root path)
          args)
   )
 
@@ -165,7 +165,7 @@ longer."
 (defun teamake-process-invoke-command-in-root (command &optional path &rest args)
   "Start processing COMMAND in project root for PATH with ARGS."
   (interactive
-   (let* ((path (teamake-project-code-root default-directory))
+   (let* ((path (teamake-code-root default-directory))
           (command (teamake-process--prompt-user-for-command
                     "Command" path 'teamake-process--user-command-history t))
           (arguments (teamake-process--prompt-user-for-command
@@ -176,7 +176,7 @@ longer."
 
   (apply #'teamake-process-invoke-command
          command
-         (teamake-project-code-root path)
+         (teamake-code-root path)
          args))
 
 (defun teamake-process--prompt-user-for-command (prompt &optional path history single-output)
@@ -199,7 +199,7 @@ Otherwise the result is split on \" \" and returned as a list."
   (let ((buffer (get-buffer-create
                  (format "*%s: %s*"
                          teamake-process-buffer-base-name
-                         (teamake-project-get-name path)))))
+                         (teamake-get-name path)))))
     (with-current-buffer buffer
       (compilation-mode)
       (read-only-mode t))

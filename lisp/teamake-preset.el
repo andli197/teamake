@@ -101,7 +101,7 @@ non matching."
 (defun teamake-preset-set-configuration-preset (source-path preset)
   "Set the configuration preset to PRESET."
   (interactive
-   (let* ((source-path (teamake-project-code-root default-directory))
+   (let* ((source-path (teamake-code-root default-directory))
           (preset (completing-read "Configuration preset: "
                                    (teamake-presets-get-configuration-presets source-path)
                                    '()
@@ -115,7 +115,7 @@ non matching."
 (defun teamake-preset-set-build-preset (source-path preset)
   "Set the build preset to PRESET."
   (interactive
-   (let* ((source-path (teamake-project-code-root default-directory))
+   (let* ((source-path (teamake-code-root default-directory))
           (preset (completing-read "Build preset: "
                                    (teamake-presets-get-build-presets
                                     source-path
@@ -131,7 +131,7 @@ non matching."
 (defun teamake-preset-set-test-preset (source-path preset)
   "Set the test preset to PRESET."
   (interactive
-   (let* ((source-path (teamake-project-code-root default-directory))
+   (let* ((source-path (teamake-code-root default-directory))
           (preset (completing-read "Test preset: "
                                    (teamake-presets-get-test-presets
                                     source-path
@@ -162,7 +162,7 @@ non matching."
 ;; Executions
 (defun teamake-preset--execute-configuration (source-path)
   (interactive
-   (let ((source-path (teamake-project-code-root default-directory)))
+   (let ((source-path (teamake-code-root default-directory)))
      (list source-path)))
   (teamake-process-invoke-teamake-in-root
    source-path
@@ -171,7 +171,7 @@ non matching."
 
 (defun teamake-preset--execute-build (source-path)
   (interactive
-   (let ((source-path (teamake-project-code-root default-directory)))
+   (let ((source-path (teamake-code-root default-directory)))
      (list source-path)))
   (teamake-process-invoke-teamake-in-root
    source-path
@@ -180,7 +180,7 @@ non matching."
 
 (defun teamake-preset--execute-test (source-path)
   (interactive
-   (let ((source-path (teamake-project-code-root default-directory)))
+   (let ((source-path (teamake-code-root default-directory)))
      (list source-path)))
   (teamake-process-invoke-command-in-root
    "ctest"
@@ -194,7 +194,7 @@ non matching."
   "Handle presets for Teamake project."
   [:description
    (lambda ()
-     (teamake-project--heading-code-tree "Presets for" (transient-scope)))
+     (teamake--code-tree-heading "Presets for" (transient-scope)))
      ("c" teamake-preset-set-configuration-preset :transient t
       :description teamake-preset--describe-configuration-preset)
      ("b" teamake-preset-set-build-preset :transient t
@@ -220,7 +220,7 @@ non matching."
    ]
   ["Flags"
    ("x" "Execute preset after selection" "-x")]
-  (interactive (list (teamake-project-code-root default-directory)))
+  (interactive (list (teamake-code-root default-directory)))
   (transient-setup 'teamake-preset '() '() :scope source-path)
   )
 

@@ -66,7 +66,7 @@ target in the build tree."
 
 (defun teamake-build-execute-build (build-root)
   "Invoke compilation using the current configuration."
-  (interactive (list (teamake-project-build-root default-directory)))
+  (interactive (list (teamake-build-root default-directory)))
   (message "Args: %s" (transient-args transient-current-command))
   (teamake-process-invoke-teamake-in-build-root
    build-root
@@ -107,9 +107,9 @@ target in the build tree."
   "Invoke a build command on an already existing configuration."
   [:description
    (lambda ()
-     (concat (teamake-project--build-tree-heading "Build" (transient-scope))
+     (concat (teamake--build-tree-heading "Build" (transient-scope))
              "\n\n"
-             (propertize "Flags and switches" 'face 'teamake-project-heading)))
+             (propertize "Flags and switches" 'face 'teamake-heading)))
    ("-r" "Read available build targets" "-r")
    ("-c" "Build clean before actual target" "--clean-first")
    ("-v" "Verbose output" "--verbose")
@@ -128,7 +128,7 @@ target in the build tree."
    ("x" teamake-build-execute-build
     :description teamake-build--describe-execute-build)
    ]
-  (interactive (list (teamake-project-build-root default-directory)))
+  (interactive (list (teamake-build-root default-directory)))
   (transient-setup 'teamake-build '() '() :scope build-path)
   )
 
