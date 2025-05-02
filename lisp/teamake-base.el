@@ -148,47 +148,25 @@ If PATH needs to be code-tree or build-tree set PREDICATE to either
             (match-string 1 content)
           "<No project>"))))
 
-(defun teamake-heading (text path &optional expected)
+(defun teamake-heading (text &optional path predicate)
   "Create a heading to use in transient with TEXT at PATH.
 
-EXPECTED can be one of `teamake-code-tree' or `teamake-build-tree'"
-  (concat (format "%s "
-                  (propertize text 'face 'teamake-heading))
-          (propertize (teamake-get-name path expected)
-                      'face 'teamake-name)
-          (format " (%s)"
-                  (propertize (teamake-get-root path expected)
-                              'face 'teamake-path))))
+PREDICATE can be one of `teamake-code-tree-p' or `teamake-build-tree-p'"
+  (concat (format "%s " (propertize text 'face 'teamake-heading))
+          (if path
+              (concat (propertize (teamake-get-name path predicate)
+                                  'face 'teamake-name)
+                      (format " (%s)"
+                              (propertize (teamake-get-root path predicate)
+                                          'face 'teamake-path))))))
 
 (defun teamake--code-tree-heading (text path)
   "Create a heading for use in transient with TEXT for PATH."
-  (concat (format "%s " (propertize text 'face 'teamake-heading))
-          (propertize (teamake--name-from-code-tree path)
-                      'face 'teamake-name)
-          (format " (%s)"
-                  (propertize (teamake-get-root path)
-                              'face 'teamake-path))))
+  (teamake-heading text path 'teamake-code-tree-p))
 
 (defun teamake--build-tree-heading (text path)
   "Create a heading for use in transient with TEXT for PATH."
-  (concat (format "%s " (propertize text 'face 'teamake-heading))
-          (propertize (teamake--name-from-build-tree path)
-                      'face 'teamake-name)
-          (format " (%s)"
-                  (propertize (teamake-build-root path)
-                              'face 'teamake-path))))
-
-(defun teamake--heading-code-tree (heading-text code-path)
-  "Return a propertized heading from HEADING-TEXT and CODE-PATH as Teamake project."
-  (concat (format "%s " (propertize heading-text 'face 'teamake-heading))
-          (teamake--code-path-propertized code-path)
-          "\n"))
-
-(defun teamake--code-path-propertized (path)
-  "Return a propertized information about PATH as Teamake project."
-  (concat (propertize (teamake--name-from-code-tree path) 'face 'teamake-name)
-          (format " (%s)" (propertize (if (string= path "") "<Empty>" path)
-                                      'face 'teamake-path))))
+  (teamake-heading text path 'teamake-build-tree-p))
 
 (provide 'teamake-base)
 ;;; teamake-base.el ends here
