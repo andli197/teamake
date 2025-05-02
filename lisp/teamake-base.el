@@ -135,13 +135,16 @@ EXPECTED can be one of `teamake-code-tree' or `teamake-build-tree'"
         (file-relative-name directory (file-name-parent-directory directory)))
     "<No project>"))
 
-;; TODO: Parse CMAKE_PROJECT_NAME:STATIC= row in CMakeCache.txt
 (defun teamake--name-from-build-tree (build-path)
   "Return project name of the project within BUILD-PATH."
   (if (teamake-build-tree-p build-path)
-      (let ((directory (teamake-build-root build-path)))
-        (file-relative-name directory (file-name-parent-directory directory)))
-    "<No project>"))
+      (let* ((cache-file (file-name-concat (teamake-build-root build-path) "CMakeCache.txt"))
+             (content (with-temp-buffer
+                        (insert-file-contents cache-file)
+                        (buffer-string))))
+        (if (string-match "CMAKE_PROJECT_NAME:STATIC=\\(.+\\)" content)
+            (match-string 1 content)
+          "<No project>"))))
 
 (defun teamake-heading (text path &optional expected)
   "Create a heading to use in transient with TEXT at PATH.
