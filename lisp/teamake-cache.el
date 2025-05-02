@@ -39,13 +39,6 @@
   (let ((output (teamake-cache--read-all path)))
     (seq-find (lambda (l) (string= (plist-get l :name) name)) output)))
 
-;; (teamake-cache--read-all "c:/Arbetsfiler/Andreas/project/chess/chess-build/MultiNinja/")
-;; (teamake-cache--set "c:/Arbetsfiler/Andreas/project/chess/chess-build/MultiNinja/" "FOOBAR" "ON" "BOOL")
-;; (teamake-cache--set "c:/Arbetsfiler/Andreas/project/chess/chess-build/MultiNinja/" "FOOBAR")
-;; (teamake-cache--get "c:/Arbetsfiler/Andreas/project/chess/chess-build/MultiNinja/" "CMAKE_INSTALL_PREFIX")
-
-(transient-define-infix 
-
 (defun teamake-cache--select-name (ccache-entries)
   "Select the name from the CCACHE-ENTRIES."
   (seq-map (lambda (line)
@@ -80,10 +73,6 @@ If entry cannot be matched an empty list is returned."
   (let ((cmake-cache-entries (teamake-cache--parse-existing path)))
     (setq teamake-cache--current-cache (seq-map 'teamake-cache--to-plist cmake-cache-entries))))
 
-;; (teamake-cache--select-variable "c:/Arbetsfiler/Andreas/project/chess/chess-build/MultiNinja/")
-;; (teamake-cache--list-variables "c:/Arbetsfiler/Andreas/project/chess/chess-build/MultiNinja/")
-;; (teamake-cache--parse-existing "c:/Arbetsfiler/Andreas/project/chess/chess-build/MultiNinja/")
-  
 (transient-define-prefix teamake-cache (build-path)
   "Manage CMake cache entries."
   [:description

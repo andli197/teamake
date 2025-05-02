@@ -101,7 +101,7 @@ default configured PATH as a fallback."
                             "cmake " path 'teamake-process--cmake-command-history)))
      (seq-concatenate 'list (list path) teamake-arguments)))
 
-  (apply #'teamake-process-invoke-teamake
+  (apply #'teamake-process-invoke-cmake
          (teamake-code-root path)
          args))
 
@@ -128,8 +128,6 @@ the `shell-file-name' is specified by `teamake-process-preferred-shell'."
         (default-directory (or path default-directory)))
     (shell-command-to-string (mapconcat 'shell-quote-argument args " "))))
 
-;; (teamake-shell-command-to-string '() (teamake-process--get-cmake-tool "cmake") "c:/Arbetsfiler/Andreas/project/chess/chess-build/x64/release_with_debug_info/" "-LAH" "-N")
-
 (defun teamake-cmake-shell-command-to-string (&rest args)
   "Call `teamake-shell-command-to-string' with ARGS passed to CMake.
 
@@ -139,10 +137,6 @@ Optional PATH is used to set `default-directory' for the processing."
          (teamake-process--get-cmake-tool "cmake")
          args))
 
-;; (teamake-cmake-shell-command-to-string "c:/Arbetsfiler/Andreas/project/chess/chess-build/x64/release_with_debug_info/" "-LAH" "-N")
-;; (teamake-cmake-shell-command-to-string "c:/Arbetsfiler/Andreas/project/chess/chess-build/x64/release_with_debug_info/" "-DFOOBAR:STRING=\"My value\"")
-;; (teamake-cmake-shell-command-to-string "c:/Arbetsfiler/Andreas/project/chess/chess-build/x64/release_with_debug_info/" "-UFOOBAR")
-
 (defun teamake-ctest-shell-command-to-string (&optional path &rest args)
     "Call `teamake-shell-command-to-string' with ARGS passed to CTest.
 
@@ -151,8 +145,6 @@ Optional PATH is used to set `default-directory' for the processing."
          path
          (teamake-process--get-cmake-tool "ctest")
          args))
-
-;; (teamake-ctest-shell-command-to-string "c:/Arbetsfiler/Andreas/project/chess/chess-build/x64/release_with_debug_info/" "--j8")
 
 (defun teamake-cpack-shell-command-to-string (&optional path &rest args)
     "Call `teamake-shell-command-to-string' with ARGS passed to CPack.
@@ -178,12 +170,6 @@ The DISPLAY parameter is passed along to the process file."
          (teamake-process--get-cmake-tool "cmake")
          path
          args))
-
-;; (teamake-cmake-process-file "c:/Arbetsfiler/Andreas/project/chess/chess-build/x64/release_with_debug_info"  "c:/Arbetsfiler/Andreas/project/chess/chess-build/x64/release_with_debug_info" "-LAH" "-N")
-;; (teamake-cmake-process-file "c:/Arbetsfiler/Andreas/project/chess/chess-build/x64/release_with_debug_info"  "c:/Arbetsfiler/Andreas/project/chess/chess-build/x64/release_with_debug_info" "-LAH" "-N" "--foo")
-;; (teamake-cmake-process-file "c:/Arbetsfiler/Andreas/project/chess/chess-build/x64/release_with_debug_info/" "-LAH" "-N")
-;; (teamake-shell-command-to-string-cmake "c:/Arbetsfiler/Andreas/project/chess/chess-build/x64/release_with_debug_info/" "-LAH" "-N")
-;; (teamake-cmake-shell-command-to-string "c:/Arbetsfiler/Andreas/project/chess/chess-build/x64/release_with_debug_info" ". -LAH -N")
 
 (defun teamake-process--prompt-user-for-command (prompt &optional path history single-output)
   "PROMPT for command to be executed at PATH with HISTORY.

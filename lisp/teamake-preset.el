@@ -2,6 +2,7 @@
 ;;; Code:
 
 (require 'json)
+(require 'transient)
 (require 'teamake-base)
 (require 'teamake-process)
 
@@ -82,7 +83,7 @@ non matching."
 (defun teamake-presets--get-presets (source-path node)
   "Read the NODE from the TeamakePresets.json located under SOURCE-PATH."
   (let* ((json-object (teamake-presets--parse-preset-file
-                       (file-name-concat source-path "TeamakePresets.json")))
+                       (file-name-concat source-path "CMakePresets.json")))
          (preset (assoc node json-object 'string=)))
     (if preset
         (cdr preset)
@@ -164,7 +165,7 @@ non matching."
   (interactive
    (let ((source-path (teamake-code-root default-directory)))
      (list source-path)))
-  (teamake-process-invoke-teamake-in-root
+  (teamake-process-invoke-cmake-in-root
    source-path
    (format "-S=%s" source-path)
    (format "--preset=%s" teamake-preset-configuration)))
@@ -173,7 +174,7 @@ non matching."
   (interactive
    (let ((source-path (teamake-code-root default-directory)))
      (list source-path)))
-  (teamake-process-invoke-teamake-in-root
+  (teamake-process-invoke-cmake-in-root
    source-path
    "--build"
    (format "--preset=%s" teamake-preset-build)))

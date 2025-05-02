@@ -11,12 +11,12 @@
   "Invoke a Teamake command from the list of available commands."
   ["Teamake dwim commands\n"
    [:if (lambda () (teamake-code-tree-p (transient-scope)))
-    :description (lambda () (teamake-heading "Code" (transient-scope) 'teamake-code-tree))
+    :description (lambda () (teamake-heading "Code" (transient-scope) 'teamake-code-tree-p))
     ("c" "Configuration"         teamake-configure)
     ("p" "Preset execution"      teamake-preset)
     ]
    [:if (lambda () (teamake-build-tree-p (transient-scope)))
-    :description (lambda () (teamake-heading "Build" (transient-scope) 'teamake-build-tree))
+    :description (lambda () (teamake-heading "Build" (transient-scope) 'teamake-build-tree-p))
     ("b" "Build" teamake-build)
     ]
    ]

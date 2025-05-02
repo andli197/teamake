@@ -154,7 +154,6 @@
 (defun teamake-configure-execute ()
   "Execute the currently configured Teamake command."
   (interactive)
-  (transient-
   (message "args: %s" (transient-args transient-current-command)))
 
 
@@ -178,7 +177,7 @@
   "Invoke a Teamake configuration step."
   [:description
    (lambda ()
-     (teamake-heading "Configure " (transient-scope) 'teamake-code-tree))
+     (teamake-heading "Configure " (transient-scope) 'teamake-code-tree-p))
    ("b" teamake-configure-set-build-path :transient t
     :description teamake-configure--describe-build-path)
    ("d" (lambda () (interactive) (teamake-cache teamake-configure-build-path)) :transient t
