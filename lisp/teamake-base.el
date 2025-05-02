@@ -99,41 +99,43 @@ If no source-path is provided `default-directory' is used and returned."
   "Determine if PATH is part of a code tree."
   (not (string= (teamake-code-root path) "")))
 
-(intern "teamake-code-tree")
-(intern "teamake-build-tree")
-
-(defun teamake-get-name (path &optional expected)
+(defun teamake-get-name (path &optional predicate)
   "Return deduced project-name from PATH.
 
-EXPECTED can be one of `teamake-code-tree' or `teamake-build-tree'"
-  (let ((expect-code (or (not expected) (eq expected 'teamake-code-tree)))
-        (expect-build (or (not expected) (eq expected 'teamake-build-tree))))
-    (cond ((and (teamake-code-tree-p path) expect-code)
+If PATH needs to be code-tree or build-tree set PREDICATE to either
+`teamake-code-tree-p' or `teamake-build-tree-p'."
+  (let* ((predicate (or predicate (lambda (path) t)))
+         (prediction (funcall predicate path)))
+    (cond ((and (teamake-code-tree-p path) prediction)
            (teamake--name-from-code-tree path))
-          ((and (teamake-build-tree-p path) expect-build)
+          ((and (teamake-build-tree-p path) prediction)
            (teamake--name-from-build-tree path))
           (t "<No project name>"))))
 
-(defun teamake-get-root (path &optional expected)
+(defun teamake-get-root (path &optional predicate)
   "Return deduced root from PATH.
 
-EXPECTED can be one of `teamake-code-tree' or `teamake-build-tree'"
+If PATH needs to be code-tree or build-tree set PREDICATE to either
+`teamake-code-tree-p' or `teamake-build-tree-p'."
 
-  (let ((expect-code (or (not expected) (eq expected 'teamake-code-tree)))
-        (expect-build (or (not expected) (eq expected 'teamake-build-tree))))
-    (cond ((and (teamake-code-tree-p path) expect-code)
+  (let* ((predicate (or predicate (lambda (path) t)))
+         (prediction (funcall predicate path)))
+    (cond ((and (teamake-code-tree-p path) prediction)
            (teamake--find-root path "CMakeLists.txt"))
-          ((and (teamake-build-tree-p path) expect-build)
+          ((and (teamake-build-tree-p path) prediction)
            (teamake--find-root path "CMakeCache.txt"))
           (t "<No project path>"))))
 
-;;; TODO: Parse CMakeLists.txt and check for project() to read project name
 (defun teamake--name-from-code-tree (&optional code-path)
   "Return project name of the project within CODE-PATH."
   (if (teamake-code-tree-p code-path)
-      (let ((directory (teamake-code-root code-path)))
-        (file-relative-name directory (file-name-parent-directory directory)))
-    "<No project>"))
+      (let* ((cmake-lists (file-name-concat (teamake-code-root code-path) "CMakeLists.txt"))
+             (content (with-temp-buffer
+                        (insert-file-contents cmake-lists)
+                        (buffer-string))))
+        (if (string-match "project(\\(.+\\))" content)
+            (car (split-string (match-string 1 content) " " t))
+          "<No project>"))))
 
 (defun teamake--name-from-build-tree (build-path)
   "Return project name of the project within BUILD-PATH."
