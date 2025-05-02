@@ -30,13 +30,18 @@
 
   (setq teamake-build-path path))
 
-(defun teamake-build--read-build-targets ()
+(defun teamake-build--read-build-targets (build-path)
   "Read build targets from `teamake-build-path' using target 'help'.
 
 Assuming the generator can provide available targets using the 'help'
 target in the build tree."
-  (let ((teamake-command (format "--build \"%s\" --target help" teamake-build-path)))
-    (teamake-process-invoke teamake-command)))
+  (interactive (list (teamake-build-root default-directory)))
+  (teamake-cmake-shell-command-to-string
+   build-path
+   "--build"
+   (format "\"%s\"" build-path)
+   "--target"
+   "help"))
 
 (defun teamake-build--filter-targets (targets)
   "Filter through all TARGETS and only show lines with valid targets."
@@ -45,10 +50,11 @@ target in the build tree."
      (re-seq (re-seq "\\(.\\): .+" line)))
    targets))
 
-(defun teamake-build-set-build-target (target)
+(defun teamake-build-set-build-target (build-path target)
   "Set `teamake-build-target' to TARGET."
   (interactive
-   (let ((targets (split-string (teamake-build--read-build-targets) "\n")))
+   (let* ((build-path default-directory)
+          (targets (split-string (teamake-build--read-build-targets build-path) "\n")))
      (list (completing-read "Target: " targets '()))))
   (setq teamake-build-target target))
 
@@ -59,30 +65,24 @@ target in the build tree."
     (user-error "Expected a number, was given \"%s\"" amount))
   (setq teamake-build-parallel amount))
 
-(defun teamake-build-set-config (source-path config)
+(defun teamake-build-set-config (build-path config)
   "Set `teamake-build-config' to CONFIG."
   (interactive
-   (let* ((source-path (teamake-build-root default-directory))
+   (let* ((build-path (teamake-build-root default-directory))
           (config (read-string "Configuration: " "Debug")))
-     (list source-path config)))
+     (list build-path config)))
   (set teamake-build-config config))
 
-(defun teamake-build-execute-build (build-root)
+(defun teamake-build-execute-build (build-path)
   "Invoke compilation using the current configuration."
   (interactive (list (teamake-build-root default-directory)))
   (message "Args: %s" (transient-args transient-current-command))
-  (teamake-process-invoke-teamake-in-build-root
-   build-root
+  (teamake-process-invoke-cmake-in-build-root
+   build-path
    "--build"
-   build-root
+   build-path
    "--target"
    "help"))
-
-(defun teamake-build--describe-build-path ()
-  "Describe the build path."
-  (format "Build(%s)"
-          (propertize (teamake-return-value-or-default teamake-build-path "<Unset>")
-                      'face 'transient-value)))
 
 (defun teamake-build--describe-build-target ()
   "Describe the build path."
@@ -119,11 +119,9 @@ target in the build tree."
    ("-v" "Verbose output" "--verbose")
    ]
   ["Teamake build"
-   ;; ("b" teamake-build-set-build-path :transient t
-   ;;  :description teamake-build--describe-build-path)
-   ("c" (lambda () (interactive) (teamake-cache (transient-scope)))
-    :description "Modify cache variables")
-   ("C" teamake-build-set-config :transient t
+   ;; ("c" (lambda () (interactive) (teamake-cache (transient-scope)))
+   ;;  :description "Modify cache variables")
+   ("c" teamake-build-set-config :transient t
     :description teamake-build--describe-config)
    ("t" teamake-build-set-build-target :transient t
     :description teamake-build--describe-build-target)

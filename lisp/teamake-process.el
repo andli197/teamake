@@ -97,9 +97,9 @@ default configured PATH as a fallback."
   "Start processing a Teamake command in code root for PATH with ARGS."
   (interactive
    (let* ((path (teamake-code-root default-directory))
-          (teamake-arguments (teamake-process--prompt-user-for-command
+          (cmake-arguments (teamake-process--prompt-user-for-command
                             "cmake " path 'teamake-process--cmake-command-history)))
-     (seq-concatenate 'list (list path) teamake-arguments)))
+     (seq-concatenate 'list (list path) cmake-arguments)))
 
   (apply #'teamake-process-invoke-cmake
          (teamake-code-root path)
@@ -109,11 +109,11 @@ default configured PATH as a fallback."
   "Start processing a Teamake command in build root for PATH with ARGS."
   (interactive
    (let* ((path (teamake-build-root default-directory))
-          (teamake-arguments (teamake-process--prompt-user-for-command
+          (cmake-arguments (teamake-process--prompt-user-for-command
                             "cmake " path 'teamake-process--cmake-command-history)))
-     (seq-concatenate 'list (list path) teamake-arguments)))
+     (seq-concatenate 'list (list path) cmake-arguments)))
 
-  (apply #'teamake-process-invoke-teamake
+  (apply #'teamake-process-invoke-cmake
          (teamake-build-root path)
          args))
 
@@ -126,14 +126,16 @@ Optional PATH is used to set `default-directory' for the processing and
 the `shell-file-name' is specified by `teamake-process-preferred-shell'."
   (let ((shell-file-name teamake-process-preferred-shell)
         (default-directory (or path default-directory)))
-    (shell-command-to-string (mapconcat 'shell-quote-argument args " "))))
 
-(defun teamake-cmake-shell-command-to-string (&rest args)
+    ;; (shell-command-to-string (mapconcat 'shell-quote-argument args " "))))
+    (shell-command-to-string (mapconcat 'identity args " "))))
+
+(defun teamake-cmake-shell-command-to-string (&optional path &rest args)
   "Call `teamake-shell-command-to-string' with ARGS passed to CMake.
 
 Optional PATH is used to set `default-directory' for the processing."
   (apply #'teamake-shell-command-to-string
-         '()
+         (or path default-directory)
          (teamake-process--get-cmake-tool "cmake")
          args))
 

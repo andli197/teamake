@@ -195,14 +195,14 @@ non matching."
   "Handle presets for Teamake project."
   [:description
    (lambda ()
-     (teamake--code-tree-heading "Presets for" (transient-scope)))
+     (teamake-heading "Preset for" (transient-scope) 'teamake-code-tree-p))
      ("c" teamake-preset-set-configuration-preset :transient t
       :description teamake-preset--describe-configuration-preset)
      ("b" teamake-preset-set-build-preset :transient t
       :description teamake-preset--describe-build-preset)
      ("t" teamake-preset-set-test-preset :transient t
       :description teamake-preset--describe-test-preset)]
-  ["Execute\n"
+  ["Execute"
    ("C" teamake-preset--execute-configuration :transient t
     :description
     (lambda ()

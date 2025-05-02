@@ -181,7 +181,7 @@
    ("b" teamake-configure-set-build-path :transient t
     :description teamake-configure--describe-build-path)
    ("d" (lambda () (interactive) (teamake-cache teamake-configure-build-path)) :transient t
-    :description "Modify (CMake) build cache variables")
+    :description "Modify CMake build cache variables")
    ("g" teamake-configure-set-generator :transient t
     :description teamake-configure--describe-generator)
    ("T" teamake-configure-set-toolset :transient t
@@ -195,7 +195,7 @@
    ("x" teamake-configure-execute
     :description "Execute the current configuration")
    ]
-  ["Flags\n"
+  ["Flags"
    ("-f" "Create a fresh build tree, remove any pre-existing cache file" "--fresh")
    ("-w" "Enable developer warnings" "-Wdev")
    ("-W" "Suppress developer warnings" "-Wno-dev")
