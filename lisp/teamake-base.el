@@ -41,6 +41,15 @@
   :group 'teamake-faces)
 
 ;; Utilities
+(defun re-seq (regexp string)
+  "Fetch all match in the REGEXP applied to the STRING and return it as a list."
+  (save-match-data
+    (let ((pos 0) matches)
+      (while (string-match regexp string pos)
+        (push (match-string 0 string) matches)
+        (setq pos (match-end 0)))
+      (reverse matches))))
+
 (defun teamake-return-value-or-default (variable default-value)
   "Return the value of VARIABLE if it is non empty, otherwise DEFAULT-VALUE."
   (if (teamake-variable-not-set variable)
@@ -73,40 +82,52 @@ If no source-path is provided `default-directory' is used and returned."
       "")))
 
 (defun teamake-build-root (&optional build-path)
-  "Find the dominating topmost TeamakeCache.txt file in BUILD-PATH."
+  "Find the dominating topmost CMakeCache.txt file in BUILD-PATH."
   (interactive (list (read-directory-name "Select path within build tree: " default-directory '() t)))
-  (teamake--find-root build-path "TeamakeCache.txt"))
+  (teamake--find-root build-path "CMakeCache.txt"))
 
 (defun teamake-build-tree-p (path)
   "Determine if PATH is part of a build tree."
   (not (string= (teamake-build-root path) "")))
 
 (defun teamake-code-root (&optional source-path)
-  "Find the dominating topmost TeamakeLists.txt file in SOURCE-PATH."
+  "Find the dominating topmost CMakeLists.txt file in SOURCE-PATH."
   (interactive (list (read-directory-name "Select path within code tree: " default-directory '() t)))
-  (teamake--find-root source-path "TeamakeLists.txt"))
+  (teamake--find-root source-path "CMakeLists.txt"))
 
 (defun teamake-code-tree-p (path)
   "Determine if PATH is part of a code tree."
   (not (string= (teamake-code-root path) "")))
 
-(defun teamake-get-name (path)
-  "Return deduced project-name from PATH."
-  (cond ((teamake-code-tree-p path)
-         (teamake--name-from-code-tree path))
-        ((teamake-build-tree-p path)
-         (teamake--name-from-build-tree path))
-        (t "<No project>")))
+(intern "teamake-code-tree")
+(intern "teamake-build-tree")
 
-(defun teamake-get-root (path)
-  "Return deduced root from PATH."
-  (cond ((teamake-code-tree-p path)
-         (teamake--find-root path "TeamakeLists.txt"))
-        ((teamake-build-tree-p path)
-         (teamake--find-root path "TeamakeCache.txt"))
-        (t (concat path))))
+(defun teamake-get-name (path &optional expected)
+  "Return deduced project-name from PATH.
 
-;;; TODO: Parse TeamakeLists.txt and check for project() to read project name
+EXPECTED can be one of `teamake-code-tree' or `teamake-build-tree'"
+  (let ((expect-code (or (not expected) (eq expected 'teamake-code-tree)))
+        (expect-build (or (not expected) (eq expected 'teamake-build-tree))))
+    (cond ((and (teamake-code-tree-p path) expect-code)
+           (teamake--name-from-code-tree path))
+          ((and (teamake-build-tree-p path) expect-build)
+           (teamake--name-from-build-tree path))
+          (t "<No project name>"))))
+
+(defun teamake-get-root (path &optional expected)
+  "Return deduced root from PATH.
+
+EXPECTED can be one of `teamake-code-tree' or `teamake-build-tree'"
+
+  (let ((expect-code (or (not expected) (eq expected 'teamake-code-tree)))
+        (expect-build (or (not expected) (eq expected 'teamake-build-tree))))
+    (cond ((and (teamake-code-tree-p path) expect-code)
+           (teamake--find-root path "CMakeLists.txt"))
+          ((and (teamake-build-tree-p path) expect-build)
+           (teamake--find-root path "CMakeCache.txt"))
+          (t "<No project path>"))))
+
+;;; TODO: Parse CMakeLists.txt and check for project() to read project name
 (defun teamake--name-from-code-tree (&optional code-path)
   "Return project name of the project within CODE-PATH."
   (if (teamake-code-tree-p code-path)
@@ -114,7 +135,7 @@ If no source-path is provided `default-directory' is used and returned."
         (file-relative-name directory (file-name-parent-directory directory)))
     "<No project>"))
 
-;; TODO: Parse TEAMAKE_PROJECT_NAME:STATIC= row in TeamakeCache.txt
+;; TODO: Parse CMAKE_PROJECT_NAME:STATIC= row in CMakeCache.txt
 (defun teamake--name-from-build-tree (build-path)
   "Return project name of the project within BUILD-PATH."
   (if (teamake-build-tree-p build-path)
@@ -122,14 +143,16 @@ If no source-path is provided `default-directory' is used and returned."
         (file-relative-name directory (file-name-parent-directory directory)))
     "<No project>"))
 
-(defun teamake-heading (text path)
-  "Create a heading to use in transient with TEXT at PATH."
+(defun teamake-heading (text path &optional expected)
+  "Create a heading to use in transient with TEXT at PATH.
+
+EXPECTED can be one of `teamake-code-tree' or `teamake-build-tree'"
   (concat (format "%s "
                   (propertize text 'face 'teamake-heading))
-          (propertize (teamake-get-name path)
+          (propertize (teamake-get-name path expected)
                       'face 'teamake-name)
           (format " (%s)"
-                  (propertize (teamake-get-root path)
+                  (propertize (teamake-get-root path expected)
                               'face 'teamake-path))))
 
 (defun teamake--code-tree-heading (text path)
@@ -138,16 +161,16 @@ If no source-path is provided `default-directory' is used and returned."
           (propertize (teamake--name-from-code-tree path)
                       'face 'teamake-name)
           (format " (%s)"
-                  (propertize (teamake-code-tree-p path)
+                  (propertize (teamake-get-root path)
                               'face 'teamake-path))))
 
 (defun teamake--build-tree-heading (text path)
   "Create a heading for use in transient with TEXT for PATH."
-    (concat (format "%s " (propertize text 'face 'teamake-heading))
+  (concat (format "%s " (propertize text 'face 'teamake-heading))
           (propertize (teamake--name-from-build-tree path)
                       'face 'teamake-name)
           (format " (%s)"
-                  (propertize (teamake-build-tree-p path)
+                  (propertize (teamake-build-root path)
                               'face 'teamake-path))))
 
 (defun teamake--heading-code-tree (heading-text code-path)

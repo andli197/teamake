@@ -3,6 +3,7 @@
 
 (require 'transient)
 (require 'teamake-base)
+(require 'teamake-cache)
 
 (defvar teamake-configure-source-path ""
   "The current source path.")
@@ -143,34 +144,45 @@
           (propertize (format "-DTEAMAKE_INSTALL_PREFIX=%s" (teamake-return-value-or-default teamake-configure-install-prefix "<Unset>"))
                       'face 'transient-value)))
 
+(transient-define-suffix teamake-configure-execute ()
+  :transient 'transient--do-call
+  (interactive)
+  (let ((scope (transient-scope)))
+    (message "Scope: %s" scope)))
+
+
 (defun teamake-configure-execute ()
   "Execute the currently configured Teamake command."
   (interactive)
+  (transient-
   (message "args: %s" (transient-args transient-current-command)))
 
 
+;; (defun teamake-configure--select-cache-variable-from-build-tree (path)
+;;   "Select an existing cache variable from PATH within an existing build-tree."
+;;   (let ((selection
 
-(transient-define-prefix teamake-configure-manage-cache-variables (code-path &optional build-path)
-  [[:description
-    "Hu hu hu hu"
-    ("b" "bbbbbb" "--bb")
-   ]]
-  )
+;; (transient-define-prefix teamake-configure-manage-cache-variables (build-or-code-path)
+;;   [[:description
+;;     "Hu hu hu hu"
+;;     ("b" "bbbbbb" "--bb")
+;;    ]]
+;;   )
+
+(defun teamake-configure-call-cache ()
+  "Invoke teamake-cache with selected build path."
+  (interactive)
+  (teamake-cache teamake-configure-build-path))
 
 (transient-define-prefix teamake-configure (code-path)
   "Invoke a Teamake configuration step."
   [:description
    (lambda ()
-     (teamake--code-tree-heading "Configure " (transient-scope)))
+     (teamake-heading "Configure " (transient-scope) 'teamake-code-tree))
    ("b" teamake-configure-set-build-path :transient t
     :description teamake-configure--describe-build-path)
-   ("c" teamake-configure-manage-cache-variables
-    :description "Configure cace variables")
-    
-   ;; ("-D" teamake-configure--set-cache-entris :transient t
-   ;;  :description teamake-configure--describe-cache-entries)
-   ;; ("-U" teamake-configure--set-remove-cache-entries :transient t
-   ;;  :description teamake-configure--describe-remove-cache-entries)
+   ("d" (lambda () (interactive) (teamake-cache teamake-configure-build-path)) :transient t
+    :description "Modify (CMake) build cache variables")
    ("g" teamake-configure-set-generator :transient t
     :description teamake-configure--describe-generator)
    ("T" teamake-configure-set-toolset :transient t
@@ -196,9 +208,9 @@
    ("-C" "Make deprecated macro and function warnings not errors" "-Wno-error=deprecated")
    ]
 
-  (interactive (list (teamake-code-root)))
-  (transient-setup 'teamake-configure '() '() :scope code-path)
-  )
+  (interactive (list (teamake-code-root default-directory)))
+  (transient-setup 'teamake-configure '() '() :scope code-path))
+  
 
 (provide 'teamake-configure)
 ;;; teamake-configure.el ends here

@@ -59,9 +59,12 @@ target in the build tree."
     (user-error "Expected a number, was given \"%s\"" amount))
   (setq teamake-build-parallel amount))
 
-(defun teamake-build-set-config (config)
+(defun teamake-build-set-config (source-path config)
   "Set `teamake-build-config' to CONFIG."
-  (interactive "sConfig: ")
+  (interactive
+   (let* ((source-path (teamake-build-root default-directory))
+          (config (read-string "Configuration: " "Debug")))
+     (list source-path config)))
   (set teamake-build-config config))
 
 (defun teamake-build-execute-build (build-root)
@@ -105,7 +108,8 @@ target in the build tree."
 
 (transient-define-prefix teamake-build (build-path)
   "Invoke a build command on an already existing configuration."
-  [:description
+  [:if (lambda () (teamake-build-tree-p build-path))
+   :description
    (lambda ()
      (concat (teamake--build-tree-heading "Build" (transient-scope))
              "\n\n"
@@ -115,9 +119,11 @@ target in the build tree."
    ("-v" "Verbose output" "--verbose")
    ]
   ["Teamake build"
-   ("b" teamake-build-set-build-path :transient t
-    :description teamake-build--describe-build-path)
-   ("c" teamake-build-set-config :transient t
+   ;; ("b" teamake-build-set-build-path :transient t
+   ;;  :description teamake-build--describe-build-path)
+   ("c" (lambda () (interactive) (teamake-cache (transient-scope)))
+    :description "Modify cache variables")
+   ("C" teamake-build-set-config :transient t
     :description teamake-build--describe-config)
    ("t" teamake-build-set-build-target :transient t
     :description teamake-build--describe-build-target)
@@ -126,13 +132,11 @@ target in the build tree."
    ]
   ["Execute"
    ("x" teamake-build-execute-build
-    :description teamake-build--describe-execute-build)
+    :description "Invoke CMake with the current configuration.")
    ]
   (interactive (list (teamake-build-root default-directory)))
   (transient-setup 'teamake-build '() '() :scope build-path)
   )
 
-(setq debug-on-error '())
-
-(provide 'teamake-build.el)
+(provide 'teamake-build)
 ;;; teamake-build.el ends here
