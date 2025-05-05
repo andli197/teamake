@@ -5,89 +5,108 @@
 (require 'teamake-process)
 
 (defvar teamake-cache--variable-match
-  "\\([a-zA-Z0-9_]+\\):\\([A-Z]+\\)=\\(.+\\)"
+  "^\\([-a-z0-9_]+\\):\\([a-z]+?\\)=\\(.?+\\)"
   "Regexp for matching cmake cache variable.")
 
-(defvar teamake-cache--extended-variable-match
-  (concat "\\(.+\\)" (regexp-quote "\n") teamake-cache--variable-match)
-  "Regexpt for matching cmake cache variable with help.")
-
-(defvar teamake-cache--current-cache '()
-  "List of currently configured cache variables.")
-
-(defun teamake-cache--parse-existing (path)
-  "Read cache variables from PATH as build root."
-  (let ((output (teamake-cmake-shell-command-to-string (format "%s " path))))
-    (re-seq teamake-cache--variable-match output)))
-
 (defun teamake-cache--set (path name &optional value type)
-  "Set the cache variable NAME in PATH to VALUE."
+  "Set the cache variable NAME in PATH to VALUE.
+
+If no value is provided, it is assumed that the variable should be unset."
   (if (not value)
       (teamake-cmake-process-file path path (concat "-U" name))
     (teamake-cmake-process-file path path (format "-D%s:%s=%s" name type value))))
 
-(defun teamake-cache--read-all (path)
-  "Read exinst cache variables from PATH."
-  (let ((output (teamake-cmake-shell-command-to-string
-                 path "-LAH" "-N")))
-    (seq-map
-     'teamake-cache--to-plist
-     (re-seq teamake-cache--extended-variable-match output))))
-
-(defun teamake-cache--get (path name)
-  "Read the value of CMake cache variable NAME from PATH."
-  (let ((output (teamake-cache--read-all path)))
-    (seq-find (lambda (l) (string= (plist-get l :name) name)) output)))
-
-(defun teamake-cache--select-name (ccache-entries)
-  "Select the name from the CCACHE-ENTRIES."
-  (seq-map (lambda (line)
-             (string-match teamake-cache--variable-match line)
-             (match-string 1 line))
-           ccache-entries))
-
-(defun teamake-cache--to-plist (entry)
-  "Transform ENTRY from CMakeCache line to a property list.
-
-The entry must follow naming pattern // Heading text\n<NAME>:<TYPE>=<VALUE>.
-If entry cannot be matched an empty list is returned."
-  (if (string-match teamake-cache--extended-variable-match entry)
-      (list :description (substring (match-string 1 entry) 3)
-            :name (match-string 2 entry)
-            :type (match-string 3 entry)
-            :value (match-string 4 entry))
-    '()))
-
-
-(defun teamake-cache--select-variable (path)
-  "Parse cmake cache variables from PATH and present user with selection."
-  (let* ((cmake-cache-entries (teamake-cache--parse-existing path))
-         (variable-name
-          (completing-read "Cache variable: " (teamake-cache--select-name cmake-cache-entries) '() t))
-         ((match (seq-find (lambda (line) (string-match variable-name line)) cmake-cache-entries '()))))
-    match))
-
 (defun teamake-cache--list-variables (path)
-  "Read all variables from PATH and list them."
-  (interactive)
-  (let ((cmake-cache-entries (teamake-cache--parse-existing path)))
-    (setq teamake-cache--current-cache (seq-map 'teamake-cache--to-plist cmake-cache-entries))))
+  "Read variables from CMakeCache.txt file located under PATH."
+  (if (not (teamake-build-tree-p path))
+      (user-error "No build root"))
+
+  (let* ((cache-file
+          (file-name-concat (teamake-get-root path 'teamake-build-tree-p)
+                            "CMakeCache.txt"))
+         (contents (with-temp-buffer
+                     (insert-file-contents cache-file)
+                     (buffer-string))))
+    (seq-map (lambda (line)
+               (save-match-data
+                 (string-match teamake-cache--variable-match line)
+                 (list :name  (match-string 1 line)
+                       :type  (match-string 2 line)
+                       :value (match-string 3 line))))
+             (re-seq teamake-cache--variable-match contents))))
+
+
+(defvar teamake-cache--variable-types '("BOOL" "STRING" "PATH" "FILEPATH" "STATIC"))
+
+(defun teamake-cache--prompt-user-for-value (type name &optional default)
+  "Prompt user for valid value according to the selected TYPE.
+
+NAME is used for prompting user for the value."
+  (let ((prompt (format "%s " name)))
+    (cond ((string= type "STRING") (read-string prompt default))
+          ((string= type "BOOL") (completing-read prompt '("ON" "OFF") '() t default))
+          ((string= type "PATH") (read-directory-name prompt (or default default-directory) '() t))
+          ((string= type "FILEPATH") (read-file-name prompt '() default t))
+          ((string= type "STATIC") (read-string (format "%s (should not be changed) " prompt) default))
+          ((string= type "INTERNAL") (read-string (format "%s (CMAKE INTERNAL VARIABLE) " prompt) default))
+          (t (user-error "Unknown input type \"%s\"" type)))))
+
+(defun teamake-cache--add-variable (build-path name value &optional type)
+  "Add the cache variable NAME to the CMakeCache in BUILD-PATH with VALUE.
+
+If no type is provided, CMake will default it to \"UNINITIALIZED\"."
+  (interactive
+   (let* ((build-path (teamake-get-root default-directory 'teamake-build-tree-p))
+          (name (read-string "Name " ))
+          (type (completing-read "Type " teamake-cache--variable-types '() t '()
+                                'teamake-cache--variable-types))
+          (value (teamake-cache--prompt-user-for-value type name)))
+     (list build-path name value type)))
+  (teamake-cache--set build-path name value type))
+
+(defun teamake-cache--remove-variable (build-path name)
+  "Remove the cache variable NAME from the CMakeCache in BUILD-PATH."
+  (interactive
+   (let* ((build-path (teamake-get-root default-directory 'teamake-build-tree-p))
+          (variables (teamake-cache--list-variables build-path))
+          (names (seq-map (lambda (var) (plist-get var :name)) variables))
+          (name (completing-read "Variable to remove " names '() t)))
+     (list build-path name)))
+  (teamake-cache--set build-path name))
+
+(defun teamake-cache--modify-variable (build-path name)
+  "Remove the cache variable NAME from the CMakeCache in BUILD-PATH."
+  (interactive
+   (let* ((build-path (teamake-get-root default-directory 'teamake-build-tree-p))
+          (variables (teamake-cache--list-variables build-path))
+          (names (seq-map (lambda (var) (plist-get var :name)) variables))
+          (name (completing-read "Variable to change " names '() t)))
+     (list build-path name)))
+
+  (let* ((variables (teamake-cache--list-variables build-path))
+         (variable (seq-find (lambda (var) (string= (plist-get var :name) name)) variables))
+         )
+    (if (not variable)
+        (user-error "No cache variable \"%s\" found" name))
+    
+    (teamake-cache--set build-path name
+                        (teamake-cache--prompt-user-for-value
+                         (plist-get variable :type)
+                         name
+                         (plist-get variable :value)))))
+
 
 (transient-define-prefix teamake-cache (build-path)
   "Manage CMake cache entries."
   [:description
    (lambda ()
-     (teamake--build-tree-heading "Manage cache for " (transient-scope)))
-   ("b" "bbbbbbb" "--b")
-
-   ("x" "Remove variable")
-   ]
-  [:description
-   (lambda ()
-     (propertize "Variables" 'face 'teamake-heading))
-   ;; ("a" "Add variable" teamake-cache--add-variable)
-   ("m" "Modify variable" teamake-cache--modify-variable)
-   ("x" "Remove variable" teamake-cache--remove-variable)
+     (concat (teamake-heading "CMake cache management"  build-path 'teamake-build-tree-p)
+             "\n"))
+   ["Variables"
+    ("a" "Add"    teamake-cache--add-variable)
+    ("m" "Modify" teamake-cache--modify-variable)
+    ("x" "Remove" teamake-cache--remove-variable)
+    ]
    ]
   (interactive (list (teamake-build-root default-directory)))
   (transient-setup 'teamake-cache '() '() :scope build-path)

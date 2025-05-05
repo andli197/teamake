@@ -128,7 +128,7 @@ the `shell-file-name' is specified by `teamake-process-preferred-shell'."
         (default-directory (or path default-directory)))
 
     ;; (shell-command-to-string (mapconcat 'shell-quote-argument args " "))))
-    (shell-command-to-string (mapconcat 'identity args " "))))
+    (shell-command-to-string (mapconcat 'shell-quote-argument args " "))))
 
 (defun teamake-cmake-shell-command-to-string (&optional path &rest args)
   "Call `teamake-shell-command-to-string' with ARGS passed to CMake.

@@ -41,17 +41,6 @@
 ;;   ;; :argument-regexp "\\(DTEAMAKE_BUILD_TYPE\\(grape\\|orange\\|cherry\\|lime\\)-snowcone\\)"
 ;;   :choices '("Debug" "Release" "RelWithDebInfo"))
 
-(defun teamake-configure-set-source-path (path)
-  "Set `teamake-configure-source-path' to PATH."
-  (interactive
-   (list (call-interactively 'teamake-code-root)))
-
-  (if (not (file-exists-p (file-name-concat path "TeamakeLists.txt")))
-      (user-error "Selected path does not contain a TeamakeLists.txt file and cannot be used as source path"))
-
-  (setq teamake-configure-source-path (directory-file-name path))
-  (message "Source path updated to %s" teamake-configure-source-path))
-
 (defun teamake-configure-set-build-path (path)
   "Set `teamake-configure-build-path' to PATH."
   (interactive
@@ -61,10 +50,25 @@
   (setq teamake-configure-build-path path)
   (message "Build path updated to %s" path))
 
+(defun teamake-configure--list-generators ()
+  "List all generators supported by CMake binary."
+  (let* ((output (teamake-cmake-shell-command-to-string '() "--help"))
+         (generators-part (substring output (string-match "Generators" output)))
+         (generator-name-expression "[* ]+\\([ -a-zA-Z0-9=]+?\\)[ \n]?+=")
+         (generators '()))
+    (save-match-data
+      (let ((pos 0))
+        (while (string-match generator-name-expression generators-part pos)
+          (push (match-string 1 generators-part) generators)
+          (setq pos (match-end 0))))
+      (setq generators (reverse generators)))))
+
 (defun teamake-configure-set-generator (generator)
   "Set `teamake-configure-generator' to GENERATOR."
   (interactive
-   (list (read-string "Generator: " teamake-configure-generator)))
+   (let* ((generators (teamake-configure--list-generators))
+          (generator (completing-read "Generator: " generators '() t teamake-configure-generator)))
+     (list generator)))
 
   (setq teamake-configure-generator generator)
   (message "Generator updated to %s" generator))
@@ -88,7 +92,7 @@
 (defun teamake-configure-set-toolchain-file (toolchain-file)
   "Set `teamake-configure-toolchain-file' to TOOLCHAIN-FILE."
   (interactive
-   (let ((toolchain-file (read-file-name "Toolchain file: " teamake-configure-source-path "toolchain.teamake" t)))
+   (let ((toolchain-file (read-file-name "Toolchain file: " teamake-configure-source-path "toolchain.cmake" t)))
      (list toolchain-file)))
 
   (setq teamake-configure-toolchain-file toolchain-file)
@@ -141,7 +145,7 @@
 (defun teamake-configure--describe-install-prefix ()
   "Return `teamake-configure-install-prefix' as protertized transient-variable."
   (format "Install (%s)"
-          (propertize (format "-DTEAMAKE_INSTALL_PREFIX=%s" (teamake-return-value-or-default teamake-configure-install-prefix "<Unset>"))
+          (propertize (format "-DCMAKE_INSTALL_PREFIX=%s" (teamake-return-value-or-default teamake-configure-install-prefix "<Unset>"))
                       'face 'transient-value)))
 
 (transient-define-suffix teamake-configure-execute ()
@@ -154,19 +158,9 @@
 (defun teamake-configure-execute ()
   "Execute the currently configured Teamake command."
   (interactive)
+
+  
   (message "args: %s" (transient-args transient-current-command)))
-
-
-;; (defun teamake-configure--select-cache-variable-from-build-tree (path)
-;;   "Select an existing cache variable from PATH within an existing build-tree."
-;;   (let ((selection
-
-;; (transient-define-prefix teamake-configure-manage-cache-variables (build-or-code-path)
-;;   [[:description
-;;     "Hu hu hu hu"
-;;     ("b" "bbbbbb" "--bb")
-;;    ]]
-;;   )
 
 (defun teamake-configure-call-cache ()
   "Invoke teamake-cache with selected build path."
