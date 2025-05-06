@@ -37,13 +37,15 @@ This is used along with the determined project name as process buffer name."
   :type 'string
   :group 'teamake-buffers)
 
-(defun teamake-process--start-process (program &optional name path &rest args)
+(defun teamake-process--start-process (program &optional name path-or-buffer-name &rest args)
   "Start an asynchronous process of PROGRAM with NAME at PATH with ARGS.
 
 Output will be displayed in the process buffer."
   (pcase-let* ((shell-file-name teamake-process-preferred-shell)
-               (default-directory (or path default-directory))
-               (process-buf (teamake-process--get-buffer default-directory))
+               (default-directory (if (file-exists-p path-or-buffer-name)
+                                      path-or-buffer-name
+                                    default-directory))
+               (process-buf (teamake-process--get-buffer path-or-buffer-name))
                (process (apply #'start-file-process
                                name
                                process-buf
@@ -78,7 +80,7 @@ default configured PATH as a fallback."
     location))
 
 (defvar teamake-process--cmake-command-history '("--help"))
-(defun teamake-process-invoke-cmake (&optional path &rest args)
+(defun teamake-process-invoke-cmake (&optional path-or-buffer-name &rest args)
   "Start processing a CMake command in PATH with ARGS."
   (interactive
    (let* ((path default-directory)
@@ -90,19 +92,19 @@ default configured PATH as a fallback."
     (apply #'teamake-process--start-process
            cmake-executable
            (file-name-nondirectory cmake-executable)
-           path
+           path-or-buffer-name
            args)))
 
 (defun teamake-process-invoke-cmake-in-root (&optional path &rest args)
-  "Start processing a Teamake command in code root for PATH with ARGS."
+  "Start processing a CMake command in code root for PATH with ARGS."
   (interactive
-   (let* ((path (teamake-code-root default-directory))
+   (let* ((path (teamake-get-root default-directory))
           (cmake-arguments (teamake-process--prompt-user-for-command
                             "cmake " path 'teamake-process--cmake-command-history)))
      (seq-concatenate 'list (list path) cmake-arguments)))
 
   (apply #'teamake-process-invoke-cmake
-         (teamake-code-root path)
+         (teamake-get-root path)
          args))
 
 (defun teamake-process-invoke-cmake-in-build-root (&optional path &rest args)
@@ -138,6 +140,16 @@ Optional PATH is used to set `default-directory' for the processing."
          (or path default-directory)
          (teamake-process--get-cmake-tool "cmake")
          args))
+
+(defun teamake-cmake-shell-command-to-lines (&optional path &rest args)
+  "Call `teamake-cmake-shell-command-to-string' with ARGS passed to CMake.
+
+Optional PATH is used to set `default-directory' for the processing.
+Return all lines as a list."
+  (split-string
+   (apply #'teamake-cmake-shell-command-to-string
+          (or path default-directory)
+          args)))
 
 (defun teamake-ctest-shell-command-to-string (&optional path &rest args)
     "Call `teamake-shell-command-to-string' with ARGS passed to CTest.
@@ -187,13 +199,18 @@ Otherwise the result is split on \" \" and returned as a list."
         result
       (split-string result " " t))))
 
-(defun teamake-process--get-buffer (path)
-  "Create or return the existing process buffer for PATH."
+(defun teamake-process--get-buffer (path-or-buffer-name)
+  "Create or return the existing process buffer.
+
+If PATH-OR-BUFFER-NAME is an existing path, apply
+`teamake-get-name' to deduce name, otherwise use
+the value as name."
   (interactive)
-  (let ((buffer (get-buffer-create
-                 (format "*%s: %s*"
-                         teamake-process-buffer-base-name
-                         (teamake-get-name path)))))
+  (let* ((name (if (file-exists-p path-or-buffer-name)
+                   (teamake-get-name path-or-buffer-name)
+                 path-or-buffer-name))
+         (buffer (get-buffer-create
+                  (format "*%s: %s*" teamake-process-buffer-base-name name))))
     (with-current-buffer buffer
       (compilation-mode)
       (read-only-mode t))
