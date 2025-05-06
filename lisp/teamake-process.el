@@ -37,17 +37,23 @@ This is used along with the determined project name as process buffer name."
   :type 'string
   :group 'teamake-buffers)
 
-(defun teamake-process--start-process (program &optional name path-or-buffer-name &rest args)
-  "Start an asynchronous process of PROGRAM with NAME at PATH with ARGS.
+(defun teamake-process--start-process (program path-or-buffer-name &rest args)
+  "Start an asynchronous process of PROGRAM with ARGS.
 
-Output will be displayed in the process buffer."
+Output will be displayed in the process buffer specified by PATH-OR-BUFFER-NAME.
+If it is set to an existing path it will be interpret as such and a root will
+be atempted to be deduced.  Otherwise it is assumed to be the name."
   (pcase-let* ((shell-file-name teamake-process-preferred-shell)
-               (default-directory (if (file-exists-p path-or-buffer-name)
-                                      path-or-buffer-name
-                                    default-directory))
+               (default-directory
+                (teamake-get-root
+                 (if (file-exists-p path-or-buffer-name)
+                     path-or-buffer-name
+                   default-directory)
+                 '()
+                 default-directory))
                (process-buf (teamake-process--get-buffer path-or-buffer-name))
                (process (apply #'start-file-process
-                               name
+                               (file-name-nondirectory program)
                                process-buf
                                program
                                args)))
@@ -79,45 +85,23 @@ default configured PATH as a fallback."
 
     location))
 
-(defvar teamake-process--cmake-command-history '("--help"))
-(defun teamake-process-invoke-cmake (&optional path-or-buffer-name &rest args)
-  "Start processing a CMake command in PATH with ARGS."
-  (interactive
-   (let* ((path default-directory)
-          (teamake-arguments (teamake-process--prompt-user-for-command
-                            "cmake " path 'teamake-process--cmake-command-history)))
-     (seq-concatenate 'list (list path) teamake-arguments)))
+(defun teamake-process-invoke-cmake (path-or-buffer-name &rest args)
+  "Start processing a CMake command with ARGS.
 
-  (let ((cmake-executable (teamake-process--get-cmake-tool "cmake")))
+PATH-OR-BUFFER-NAME if passed along to the
+`teamake-process--start-process' command."
+  (apply #'teamake-process--start-process
+         (teamake-process--get-cmake-tool "cmake")
+         path-or-buffer-name
+         args))
+
+(defun teamake-process-invoke-ctest (&optional path-or-buffer-name &rest args)
+  "Start processing a CTest command in PATH with ARGS."
+  (let ((executable (teamake-process--get-cmake-tool "ctest")))
     (apply #'teamake-process--start-process
-           cmake-executable
-           (file-name-nondirectory cmake-executable)
+           executable
            path-or-buffer-name
            args)))
-
-(defun teamake-process-invoke-cmake-in-root (&optional path &rest args)
-  "Start processing a CMake command in code root for PATH with ARGS."
-  (interactive
-   (let* ((path (teamake-get-root default-directory))
-          (cmake-arguments (teamake-process--prompt-user-for-command
-                            "cmake " path 'teamake-process--cmake-command-history)))
-     (seq-concatenate 'list (list path) cmake-arguments)))
-
-  (apply #'teamake-process-invoke-cmake
-         (teamake-get-root path)
-         args))
-
-(defun teamake-process-invoke-cmake-in-build-root (&optional path &rest args)
-  "Start processing a Teamake command in build root for PATH with ARGS."
-  (interactive
-   (let* ((path (teamake-build-root default-directory))
-          (cmake-arguments (teamake-process--prompt-user-for-command
-                            "cmake " path 'teamake-process--cmake-command-history)))
-     (seq-concatenate 'list (list path) cmake-arguments)))
-
-  (apply #'teamake-process-invoke-cmake
-         (teamake-build-root path)
-         args))
 
 (defun teamake-shell-command-to-string (&optional path &rest args)
   "Call `shell-command-to-string' with ARGS as the command.
@@ -160,23 +144,12 @@ Optional PATH is used to set `default-directory' for the processing."
          (teamake-process--get-cmake-tool "ctest")
          args))
 
-(defun teamake-cpack-shell-command-to-string (&optional path &rest args)
-    "Call `teamake-shell-command-to-string' with ARGS passed to CPack.
-
-Optional PATH is used to set `default-directory' for the processing."
-  (apply #'teamake-shell-command-to-string
-         path
-         (teamake-process--get-cmake-tool "cpack")
-         args))
-
 (defun teamake-process-file (program &optional path &rest args)
-  "Apply `process-file' in project PATH with PROGRAM and ARGS as input.
-
-The DISPLAY parameter is passed along to the process file."
+  "Apply `process-file' in project PATH with PROGRAM and ARGS as input."
   (let* ((default-directory (or path default-directory))
          (buffer (teamake-process--get-buffer default-directory))
          (inhibit-read-only t))
-    (apply #'process-file program '() buffer '() args)))
+    (apply #'process-file program '() buffer t args)))
 
 (defun teamake-cmake-process-file (&optional path &rest args)
   "Apply `teamake-process-file' with tool cmake as program."
@@ -205,7 +178,6 @@ Otherwise the result is split on \" \" and returned as a list."
 If PATH-OR-BUFFER-NAME is an existing path, apply
 `teamake-get-name' to deduce name, otherwise use
 the value as name."
-  (interactive)
   (let* ((name (if (file-exists-p path-or-buffer-name)
                    (teamake-get-name path-or-buffer-name)
                  path-or-buffer-name))

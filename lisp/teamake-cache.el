@@ -3,6 +3,7 @@
 
 (require 'teamake-base)
 (require 'teamake-process)
+(require 'teamake-cmake-help)
 
 (defvar teamake-cache--variable-match
   "^\\([-a-z0-9_]+\\):\\([a-z]+?\\)=\\(.?+\\)"
@@ -87,7 +88,7 @@ If no type is provided, CMake will default it to \"UNINITIALIZED\"."
    (let* ((build-path (teamake-get-root default-directory 'teamake-build-tree-p))
           (variables (teamake-cache--list-cache-variables build-path))
           (names (seq-map 'teamake-cache--display-cmake-cache-variable variables))
-          (name (teamake-cache--get-name-from-display (completing-read "Variable to remove " names '() t)))
+          (name (teamake-cache--get-name-from-display (completing-read "Variable to remove " names '() t))))
      (list build-path name)))
   (teamake-cache--set build-path name))
 
@@ -167,7 +168,7 @@ to the name of the variable."
    ("x" "Remove" teamake-cache--remove-variable :transient t)
    ]
    ["Help"
-    ("h" "CMake variable" teamake-cache--help-variables)]
+    ("h" "CMake variable" teamake-cmake-help--variable)]
   (interactive (list (teamake-build-root default-directory)))
   (transient-setup 'teamake-cache '() '() :scope build-path)
   )

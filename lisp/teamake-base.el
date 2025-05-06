@@ -112,7 +112,7 @@ If PATH needs to be code-tree or build-tree set PREDICATE to either
            (teamake--name-from-build-tree path))
           (t "<No project name>"))))
 
-(defun teamake-get-root (path &optional predicate)
+(defun teamake-get-root (path &optional predicate default-value)
   "Return deduced root from PATH.
 
 If PATH needs to be code-tree or build-tree set PREDICATE to either
@@ -124,7 +124,7 @@ If PATH needs to be code-tree or build-tree set PREDICATE to either
            (teamake--find-root path "CMakeLists.txt"))
           ((and (teamake-build-tree-p path) prediction)
            (teamake--find-root path "CMakeCache.txt"))
-          (t "<No project path>"))))
+          (t (or default-value "<No project path>")))))
 
 (defun teamake--name-from-code-tree (&optional code-path)
   "Return project name of the project within CODE-PATH."
