@@ -30,13 +30,24 @@
            source-path
            command)))
 
+(defun teamake-configure--build-menu ()
+  (interactive)
+  (let* ((commands (transient-args transient-current-command))
+         (build-tree (seq-find (lambda (arg) (string= (substring arg 0 3) "-B=")) commands)))
+    (message "commands: %s" commands)
+    (if build-tree
+        (teamake-build build-tree)
+      (user-error "No build tree specified"))))
+
 (transient-define-prefix teamake-configure (code-path)
   "Invoke a Teamake configuration step."
   :value '("-Wdev" "-Wdeprecated" "-Wno-error=deprecated")
-  [:description
+  [:if (lambda () (teamake-code-tree-p (transient-scope)))
+   :description
    (lambda ()
-     (teamake-heading "Configure " (transient-scope) 'teamake-code-tree-p))
-   ["Flags"
+     (concat (teamake-heading "Configure " (transient-scope) 'teamake-code-tree-p)
+             "\n\n"
+             (propertize "Flags and switches" 'face 'teamake-heading)))
     ("-f" "Create a fresh build tree, remove any pre-existing cache file" "--fresh")
     ("-w" "Enable developer warnings" "-Wdev")
     ("-W" "Suppress developer warnings" "-Wno-dev")
@@ -48,24 +59,25 @@
     ("-C" "Make deprecated macro and function warnings not errors" "-Wno-error=deprecated")
     ("--debug" "Put CMake in a debug mode." "--debug-output")
     ]
-   ["Settings"
-    ("b" "Build path" "-B="
-     :prompt "Build path"
-     :reader transient-read-directory)
-    ("i" "Installation path" "--install-prefix="
-     :prompt "Install"
-     :reader transient-read-directory)
-    ("g" "Generator" "-G="
-     :prompt "Generator"
-     :choices (lambda () (teamake-configure--list-generators)))
-    (5"T" "Toolset" "-T=" :prompt "Toolset")
-    (5"a" "Platform" "-A=" :prompt "Platform")
-    (6"t" "Toolchain file" "--toolchain="
-      :prompt "Toolchain"
-      :reader transient-read-file)
-    ("x" teamake-configure-execute
-     :description "Execute the current configuration")
-    ]
+  ["Settings"
+   ("b" "Build path" "-B="
+    :prompt "Build path"
+    :reader transient-read-directory)
+   ("i" "Installation path" "--install-prefix="
+    :prompt "Install"
+    :reader transient-read-directory)
+   ("g" "Generator" "-G="
+    :prompt "Generator"
+    :choices (lambda () (teamake-configure--list-generators)))
+   (5"T" "Toolset" "-T=" :prompt "Toolset")
+   (5"a" "Platform" "-A=" :prompt "Platform")
+   (6"t" "Toolchain file" "--toolchain="
+     :prompt "Toolchain"
+     :reader transient-read-file)
+   ("x" teamake-configure-execute
+    :description "Configure using current configuration")
+   ("X" teamake-configure--build-menu
+    :description "Open build menu for configured build tree")
    ]
   (interactive (list (teamake-code-root default-directory)))
   (transient-setup 'teamake-configure '() '() :scope code-path))

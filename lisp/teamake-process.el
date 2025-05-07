@@ -112,8 +112,6 @@ Optional PATH is used to set `default-directory' for the processing and
 the `shell-file-name' is specified by `teamake-process-preferred-shell'."
   (let ((shell-file-name teamake-process-preferred-shell)
         (default-directory (or path default-directory)))
-
-    ;; (shell-command-to-string (mapconcat 'shell-quote-argument args " "))))
     (shell-command-to-string (mapconcat 'shell-quote-argument args " "))))
 
 (defun teamake-cmake-shell-command-to-string (&optional path &rest args)

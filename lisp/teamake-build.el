@@ -2,33 +2,8 @@
 ;;; Code:
 
 (require 'teamake-base)
+(require 'teamake-cache)
 (require 'teamake-process)
-
-(defvar teamake-build-path ""
-  "The current build tree.")
-
-(defvar teamake-build-target ""
-  "The current build target.")
-
-(defvar teamake-build-parallel '()
-  "The amount of parallel compilations.")
-
-(defvar teamake-build-config ""
-  "The configuration, only valid for multi-configuration generators.")
-
-(defun teamake-build-is-valid-build-tree (path)
-  "Determine if PATH is a vanlid build tree."
-  (file-exists-p (file-name-concat path "TeamakeCache.txt")))
-
-(defun teamake-build-set-build-path (path)
-  "Set `teamake-build-path' to PATH."
-  (interactive
-   (list (read-directory-name "Build tree: " teamake-build-path '() t)))
-
-  (unless (teamake-build-is-valid-build-tree path)
-    (user-error "Selected path does not seem to be a configured build tree"))
-
-  (setq teamake-build-path path))
 
 (defun teamake-build--read-build-targets (build-path)
   "Read build targets from `teamake-build-path' using target 'help'.
@@ -36,101 +11,50 @@
 Assuming the generator can provide available targets using the 'help'
 target in the build tree."
   (interactive (list (teamake-build-root default-directory)))
-  (teamake-cmake-shell-command-to-string
+  (teamake-cmake-shell-command-to-lines
    build-path
    "--build"
-   (format "\"%s\"" build-path)
+   build-path
    "--target"
    "help"))
-
-(defun teamake-build--filter-targets (targets)
-  "Filter through all TARGETS and only show lines with valid targets."
-  (seq-filter
-   (lambda (line)
-     (re-seq (re-seq "\\(.\\): .+" line)))
-   targets))
-
-(defun teamake-build-set-build-target (build-path target)
-  "Set `teamake-build-target' to TARGET."
-  (interactive
-   (let* ((build-path default-directory)
-          (targets (split-string (teamake-build--read-build-targets build-path) "\n")))
-     (list (completing-read "Target: " targets '()))))
-  (setq teamake-build-target target))
-
-(defun teamake-build-set-parallel (amount)
-  "Set `teamake-build-parallel' to AMOUNT."
-  (interactive "nParallel compilations: ")
-  (unless (number-or-marker-p amount)
-    (user-error "Expected a number, was given \"%s\"" amount))
-  (setq teamake-build-parallel amount))
-
-(defun teamake-build-set-config (build-path config)
-  "Set `teamake-build-config' to CONFIG."
-  (interactive
-   (let* ((build-path (teamake-build-root default-directory))
-          (config (read-string "Configuration: " "Debug")))
-     (list build-path config)))
-  (set teamake-build-config config))
 
 (defun teamake-build-execute-build (build-path)
-  "Invoke compilation using the current configuration."
+  "Invoke compilation using the current configuration at BUILD-PATH."
   (interactive (list (teamake-build-root default-directory)))
-  (message "Args: %s" (transient-args transient-current-command))
-  (teamake-process-invoke-cmake-in-build-root
-   build-path
-   "--build"
-   build-path
-   "--target"
-   "help"))
-
-(defun teamake-build--describe-build-target ()
-  "Describe the build path."
-  (format "Target (%s)"
-          (propertize (teamake-return-value-or-default teamake-build-target "<all>")
-                      'face 'transient-value)))
-
-(defun teamake-build--describe-parallel ()
-  "Describe the build path."
-  (if (eq teamake-build-parallel '())
-      (format "Parallel (%s)" (propertize "<$env{TEAMAKE_BUILD_PARALLEL_LEVEL}>" 'face 'transient-value))
-    (format "Parallel (%s)" (propertize (number-to-string teamake-build-parallel) 'face 'transient-value))))
-
-(defun teamake-build--describe-config ()
-  "Describe the build path."
-  (format "Config (%s)"
-          (propertize (teamake-return-value-or-default teamake-build-config "<Unset>")
-                      'face 'transient-value)))
-
-(defun teamake-build--describe-execute-build ()
-  "Describe execution."
-  (format "Invoke Teamake with the current configuration"))
+  ;; (message "Args: %s" (transient-args transient-current-command))
+  (apply #'teamake-process-invoke-cmake
+            build-path
+            "--build"
+            build-path
+            (transient-args transient-current-command)))
 
 (transient-define-prefix teamake-build (build-path)
   "Invoke a build command on an already existing configuration."
-  [:if (lambda () (teamake-build-tree-p build-path))
+  :value '("--verbose")
+  [:if (lambda () (teamake-build-tree-p (transient-scope)))
    :description
    (lambda ()
      (concat (teamake--build-tree-heading "Build" (transient-scope))
              "\n\n"
              (propertize "Flags and switches" 'face 'teamake-heading)))
-   ("-r" "Read available build targets" "-r")
-   ("-c" "Build clean before actual target" "--clean-first")
+   ("-c" "Build target 'clean' first, then build" "--clean-first")
    ("-v" "Verbose output" "--verbose")
    ]
-  ["Teamake build"
-   ;; ("c" (lambda () (interactive) (teamake-cache (transient-scope)))
-   ;;  :description "Modify cache variables")
-   ("c" teamake-build-set-config :transient t
-    :description teamake-build--describe-config)
-   ("t" teamake-build-set-build-target :transient t
-    :description teamake-build--describe-build-target)
-   ("p" teamake-build-set-parallel :transient t
-    :description teamake-build--describe-parallel)
+  ["Build"
+   ("c" "For multi-configuration tools" "--config="
+    :prompt "Configuration "
+    :choices ("Debug" "RelWithDebInfo" "Release"))
+   ("t" "Build <target> instead of default targets" "--target="
+    :prompt "Target "
+    :choices (lambda () (teamake-build--read-build-targets (transient-scope))))
+   ("p" "Build in parallel using the given number of jobs" "--parallel="
+    :prompt "Amount "
+    :reader transient-read-number-N+)
+   ("d" "Modify cache" teamake-cache)
    ]
   ["Execute"
    ("x" teamake-build-execute-build
-    :description "Invoke CMake with the current configuration.")
+    :description "Build current configuration.")
    ]
   (interactive (list (teamake-build-root default-directory)))
   (transient-setup 'teamake-build '() '() :scope build-path)
