@@ -4,6 +4,7 @@
 (require 'teamake-base)
 (require 'teamake-cache)
 (require 'teamake-process)
+(require 'teamake-cmake-help)
 
 (defun teamake-build--read-build-targets (build-path)
   "Read build targets from `teamake-build-path' using target 'help'.
@@ -21,12 +22,15 @@ target in the build tree."
 (defun teamake-build-execute-build (build-path)
   "Invoke compilation using the current configuration at BUILD-PATH."
   (interactive (list (teamake-build-root default-directory)))
-  ;; (message "Args: %s" (transient-args transient-current-command))
   (apply #'teamake-process-invoke-cmake
             build-path
             "--build"
             build-path
             (transient-args transient-current-command)))
+
+(transient-define-suffix teamake--invoke-cache ()
+  (interactive)
+  (transient-setup 'teamake-cache '() '() :scope (transient-scope)))
 
 (transient-define-prefix teamake-build (build-path)
   "Invoke a build command on an already existing configuration."
@@ -34,13 +38,15 @@ target in the build tree."
   [:if (lambda () (teamake-build-tree-p (transient-scope)))
    :description
    (lambda ()
-     (concat (teamake--build-tree-heading "Build" (transient-scope))
-             "\n\n"
-             (propertize "Flags and switches" 'face 'teamake-heading)))
+     (concat
+      (teamake-heading "Build" (transient-scope) 'teamake-build-tree-p)
+      "\n\n"
+      (propertize "Flags" 'face 'teamake-heading)))
    ("-c" "Build target 'clean' first, then build" "--clean-first")
    ("-v" "Verbose output" "--verbose")
    ]
-  ["Build"
+  [:if (lambda () (teamake-build-tree-p (transient-scope)))
+   :description "Build"
    ("c" "For multi-configuration tools" "--config="
     :prompt "Configuration "
     :choices ("Debug" "RelWithDebInfo" "Release"))
@@ -50,11 +56,16 @@ target in the build tree."
    ("p" "Build in parallel using the given number of jobs" "--parallel="
     :prompt "Amount "
     :reader transient-read-number-N+)
-   ("d" "Modify cache" teamake-cache)
+   ("d" "Modify cache" teamake--invoke-cache
+    :transient transient--do-recurse)
    ]
-  ["Execute"
+  [:if (lambda () (teamake-build-tree-p (transient-scope)))
+   :description "Execute"
    ("x" teamake-build-execute-build
-    :description "Build current configuration.")
+    :description "Build current tree")
+   ]
+  ["Help"
+   ("h" "CMake help menu" teamake-cmake-help)
    ]
   (interactive (list (teamake-build-root default-directory)))
   (transient-setup 'teamake-build '() '() :scope build-path)

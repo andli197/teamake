@@ -6,6 +6,7 @@
 (require 'teamake-configure)
 (require 'teamake-preset)
 (require 'teamake-build)
+(require 'teamake-test)
 (require 'teamake-cmake-help)
 
 (transient-define-prefix teamake-dispatch (path)
@@ -19,6 +20,9 @@
     :description (lambda () (teamake-heading "Build" (transient-scope) 'teamake-build-tree-p))
     ("b" "Build" teamake-build)
     ]]
+   [["Test"
+     :if (lambda () (teamake-build-tree-p (transient-scope)))
+     ("t" "Test" teamake-test)]]
    [["Help"
     ("h" "CMake help menu" teamake-cmake-help)]]
   (interactive

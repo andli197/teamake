@@ -40,6 +40,17 @@
   "Face for teamake project path."
   :group 'teamake-faces)
 
+
+;; Customs
+(defcustom teamake-custom-project-name
+  '()
+  "If set, this will be used as project name for both build trees and code trees.
+
+Useful for allowing multiple worktrees within the same project to distinguish
+different trees."
+  :group 'teamake-misc
+  :type 'string)
+
 ;; Utilities
 (defun re-seq (regexp string)
   "Fetch all match in the REGEXP applied to the STRING and return it as a list."
@@ -64,10 +75,8 @@
   "Look for the dominating FILENAME in PATH.
 
 Look backward for FILENAME files and return the path to the topmost
-file.  From the selected PATH first locate the dominating FILENAME
-file, then look for FILENAME files in parent directories.
-
-If no source-path is provided `default-directory' is used and returned."
+file.  From the selected PATH first locate the dominating FILENAME,
+then look for FILENAME files in parent directories."
   (let* ((start-path (or path default-directory))
          (topmost-directory (locate-dominating-file start-path filename))
          (candidate-file (file-name-concat topmost-directory filename)))
@@ -90,6 +99,14 @@ If no source-path is provided `default-directory' is used and returned."
   "Determine if PATH is part of a build tree."
   (not (string= (teamake-build-root path) "")))
 
+(defun teamake-select-tree (prompt predicate initial mustmatch)
+  "PROMPT for selection of tree."
+  (let ((root (teamake-get-root (read-directory-name prompt initial '() mustmatch) predicate "")))
+    (while (and (string= root "") (not mustmatch))
+      (message "No root!")
+      (setq root (teamake-get-root (read-directory-name prompt initial '() mustmatch) predicate "")))
+    root))
+
 (defun teamake-code-root (&optional source-path)
   "Find the dominating topmost CMakeLists.txt file in SOURCE-PATH."
   (interactive (list (read-directory-name "Select path within code tree: " default-directory '() t)))
@@ -107,9 +124,11 @@ If PATH needs to be code-tree or build-tree set PREDICATE to either
   (let* ((predicate (or predicate (lambda (path) t)))
          (prediction (funcall predicate path)))
     (cond ((and (teamake-code-tree-p path) prediction)
-           (teamake--name-from-code-tree path))
+           (or teamake-custom-project-name
+               (teamake--name-from-code-tree path)))
           ((and (teamake-build-tree-p path) prediction)
-           (teamake--name-from-build-tree path))
+           (or teamake-custom-project-name
+               (teamake--name-from-build-tree path)))
           (t "<No project name>"))))
 
 (defun teamake-get-root (path &optional predicate default-value)
@@ -125,6 +144,18 @@ If PATH needs to be code-tree or build-tree set PREDICATE to either
           ((and (teamake-build-tree-p path) prediction)
            (teamake--find-root path "CMakeCache.txt"))
           (t (or default-value "<No project path>")))))
+
+(defun teamake-tree-p (path predicate)
+  "Return if PATH is a recognized tree.
+
+PREDICATE is testing for type of tree."
+
+  (let* ((prediction (funcall predicate path)))
+    (cond ((and (teamake-code-tree-p path) prediction)
+           (teamake-code-tree-p path))
+          ((and (teamake-build-tree-p path) prediction)
+           (teamake-build-tree-p path))
+          (t '()))))
 
 (defun teamake--name-from-code-tree (&optional code-path)
   "Return project name of the project within CODE-PATH."

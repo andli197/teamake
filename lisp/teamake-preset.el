@@ -165,7 +165,7 @@ non matching."
   (interactive
    (let ((source-path (teamake-code-root default-directory)))
      (list source-path)))
-  (teamake-process-invoke-cmake-in-root
+  (teamake-process-invoke-cmake
    source-path
    (format "-S=%s" source-path)
    (format "--preset=%s" teamake-preset-configuration)))
@@ -174,7 +174,7 @@ non matching."
   (interactive
    (let ((source-path (teamake-code-root default-directory)))
      (list source-path)))
-  (teamake-process-invoke-cmake-in-root
+  (teamake-process-invoke-cmake
    source-path
    "--build"
    (format "--preset=%s" teamake-preset-build)))
@@ -183,8 +183,7 @@ non matching."
   (interactive
    (let ((source-path (teamake-code-root default-directory)))
      (list source-path)))
-  (teamake-process-invoke-command-in-root
-   "ctest"
+  (teamake-process-invoke-ctest
    source-path
    (format "--preset=%s" teamake-preset-test)))
 

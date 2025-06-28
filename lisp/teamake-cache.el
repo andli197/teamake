@@ -123,15 +123,13 @@ to the name of the variable."
   (let* ((variables (teamake-cache--list-cache-variables build-path))
          (variable (seq-find (lambda (var) (string= (plist-get var :name) name)) variables))
          (previous (plist-get variable :value))
+         (type (plist-get variable :type))
+         (new-value (teamake-cache--prompt-for-value type name previous))
          )
     (if (not variable)
         (user-error "No cache variable \"%s\" found" name))
     
-    (teamake-cache--set build-path name previous
-                        (teamake-cache--prompt-for-value
-                         (plist-get variable :type)
-                         name
-                         previous))))
+    (teamake-cache--set build-path name new-value previous type)))
 
 (defun teamake-cache--help-variables (variable)
   "Call for the cmake help for VARIABLE."
@@ -153,11 +151,13 @@ to the name of the variable."
   (let ((args (teamake-cache--arguments)))
     (seq-find (lambda (s) (string= s "--list-details")) args)))
 
-(transient-define-prefix teamake-cache (build-path)
+(transient-define-prefix teamake-cache ()
   "Manage CMake cache entries."
   [:description
    (lambda ()
-     (concat (teamake-heading "CMake cache management"  (transient-scope) 'teamake-build-tree-p)
+     (concat (teamake-heading "CMake cache management"
+                              (transient-arg-value "-B=" (transient-args transient-current-command))
+                              'teamake-build-tree-p)
              "\n"))
    ["Flags"
     ("-d" "List details about variables" ("-d" "--list-details"))]
@@ -169,8 +169,9 @@ to the name of the variable."
    ]
    ["Help"
     ("h" "CMake variable" teamake-cmake-help--variable)]
-  (interactive (list (teamake-build-root default-directory)))
-  (transient-setup 'teamake-cache '() '() :scope build-path)
+   ;; (interactive (transient-setup 'teamake-build '() '()
+   ;;                               :value (list (concat "-B=" (teamake-build-root default-directory)))))
+  ;; (transient-setup 'teamake-cache '() '() :scope build-path)
   )
 
 (provide 'teamake-cache)

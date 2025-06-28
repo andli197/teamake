@@ -1,7 +1,6 @@
 
-(require 'teamake-process)
 (require 'transient)
-
+(require 'teamake-process)
 
 (defun teamake-cmake-help--prompt-for-type (full-listing prompt)
   (let* ((listings (teamake-cmake-shell-command-to-lines '() full-listing))
@@ -75,7 +74,7 @@
    ("M" "Module"    teamake-cmake-help--module)
    ("p" "Policy"    teamake-cmake-help--policy)
    ("P" "Property"  teamake-cmake-help--property)
-   ("p" "Variable"  teamake-cmake-help--variable)
+   ("v" "Variable"  teamake-cmake-help--variable)
    ]
   )
 

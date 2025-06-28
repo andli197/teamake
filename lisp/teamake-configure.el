@@ -4,6 +4,8 @@
 (require 'transient)
 (require 'teamake-base)
 (require 'teamake-cache)
+(require 'teamake-cmake-help)
+(require 'teamake-preset)
 
 (defun teamake-configure--list-generators ()
   "List all generators supported by CMake binary."
@@ -30,18 +32,19 @@
            source-path
            command)))
 
-(defun teamake-configure--build-menu ()
+(transient-define-suffix teamake-configure--build-menu ()
   (interactive)
-  (let* ((commands (transient-args transient-current-command))
-         (build-tree (seq-find (lambda (arg) (string= (substring arg 0 3) "-B=")) commands)))
-    (message "commands: %s" commands)
+  (let* ((args (transient-args transient-current-command))
+         (build-tree (transient-arg-value "-B=" args)))
     (if build-tree
-        (teamake-build build-tree)
+        (progn
+          (message "Build tree: %s" build-tree)
+          (transient-setup 'teamake-build))
       (user-error "No build tree specified"))))
 
 (transient-define-prefix teamake-configure (code-path)
   "Invoke a Teamake configuration step."
-  :value '("-Wdev" "-Wdeprecated" "-Wno-error=deprecated")
+  :value '("-Wdev" "-Wno-error=dev" "-Wdeprecated" "-Wno-error=deprecated" "--debug")
   [:if (lambda () (teamake-code-tree-p (transient-scope)))
    :description
    (lambda ()
@@ -69,18 +72,26 @@
    ("g" "Generator" "-G="
     :prompt "Generator"
     :choices (lambda () (teamake-configure--list-generators)))
-   (5"T" "Toolset" "-T=" :prompt "Toolset")
-   (5"a" "Platform" "-A=" :prompt "Platform")
-   (6"t" "Toolchain file" "--toolchain="
+   ("p" "Preset" "--preset="
+    :prompt "Select preset"
+    :choices (lambda () (teamake-presets-get-configuration-presets
+                         (transient-arg-value "-S=" (transient-args transient-current-command)))))
+   (5 "T" "Toolset" "-T=" :prompt "Toolset")
+   (5 "a" "Platform" "-A=" :prompt "Platform")
+   (6 "t" "Toolchain file" "--toolchain="
      :prompt "Toolchain"
      :reader transient-read-file)
    ("x" teamake-configure-execute
     :description "Configure using current configuration")
    ("X" teamake-configure--build-menu
-    :description "Open build menu for configured build tree")
+    :description "Open build menu for configured build tree"
+    :transient transient--do-recurse)
    ]
+  ["Help"
+    ("h" "CMake help menu" teamake-cmake-help)]
   (interactive (list (teamake-code-root default-directory)))
-  (transient-setup 'teamake-configure '() '() :scope code-path))
+  (transient-setup 'teamake-configure '() '() :scope code-path)
+  )
   
 
 (provide 'teamake-configure)
