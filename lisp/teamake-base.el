@@ -40,7 +40,6 @@
   "Face for teamake project path."
   :group 'teamake-faces)
 
-
 ;; Customs
 (defcustom teamake-custom-project-name
   '()
@@ -123,12 +122,11 @@ If PATH needs to be code-tree or build-tree set PREDICATE to either
 `teamake-code-tree-p' or `teamake-build-tree-p'."
   (let* ((predicate (or predicate (lambda (path) t)))
          (prediction (funcall predicate path)))
-    (cond ((and (teamake-code-tree-p path) prediction)
-           (or teamake-custom-project-name
-               (teamake--name-from-code-tree path)))
+    (cond (teamake-custom-project-name teamake-custom-project-name)
+          ((and (teamake-code-tree-p path) prediction)
+           (teamake--name-from-code-tree path))
           ((and (teamake-build-tree-p path) prediction)
-           (or teamake-custom-project-name
-               (teamake--name-from-build-tree path)))
+           (teamake--name-from-build-tree path))
           (t "<No project name>"))))
 
 (defun teamake-get-root (path &optional predicate default-value)

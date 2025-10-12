@@ -131,7 +131,8 @@ Return all lines as a list."
   (split-string
    (apply #'teamake-cmake-shell-command-to-string
           (or path default-directory)
-          args)))
+          args)
+   "\n"))
 
 (defun teamake-ctest-shell-command-to-string (&optional path &rest args)
     "Call `teamake-shell-command-to-string' with ARGS passed to CTest.
