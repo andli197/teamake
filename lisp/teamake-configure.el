@@ -178,21 +178,22 @@
    ("tf" "Set the output format of the trace" "--trace-format="
     :prompt "Format: "
     :choices ("human" "json-v1"))
-   ("ts" "Trace only this CMake file/module" "trace-source="
+   ("tts" "Trace only this CMake file/module" "--trace-source="
     :prompt "CMake file/module: "
-    :reader transient-read-file)
+    :multi-value repeat)
    ("tr" "Redirect trace output to a file instead of stderr" "--trace-redirect="
     :prompt "Trace output: "
     :reader transient-read-file)
    ]
-   
   ["Options"
    ("b" " Build path" "-B="
     :prompt "Build path: "
     :reader transient-read-directory)
    ;; -D <var>[:<type>]=<value>    = Create or update a cmake cache entry.
-   ("dd" "Manually create or update a CMake cache entry" "-D="
-    )
+   ("D" " Create or update a cmake cache entry." "-D "
+    :class transient-option
+    :prompt "List entries as <var>[:<type>]=<value> and comma separate them: "
+    :multi-value repeat)
    ("ge" "Generator" "-G="
     :prompt "Generator: "
     :choices (lambda () (teamake-configure--list-generators)))
@@ -212,8 +213,6 @@
    ("pf" "Select an output path for the profiling data" "--profiling-output="
     :prompt "Select profiling output: "
     :reader transient-read-file)
-   ;; --preset <preset>,--preset=<preset>
-   ;;                              = Specify a configure preset.
    ("pr" teamake-configure--select-preset
     :description "Read configuration from preset")
    ("gr" "Generate graphviz of dependencies" "--graphviz="
