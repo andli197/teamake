@@ -32,6 +32,24 @@ target in the build tree."
   (interactive)
   (transient-setup 'teamake-cache '() '() :scope (transient-scope)))
 
+  ;; --parallel [<jobs>], -j [<jobs>]
+  ;;                = Build in parallel using the given number of jobs.
+  ;;                  If <jobs> is omitted the native build tool's
+  ;;                  default number is used.
+  ;;                  The CMAKE_BUILD_PARALLEL_LEVEL environment variable
+  ;;                  specifies a default parallel level when this option
+  ;;                  is not given.
+  ;; -t <tgt>..., --target <tgt>...
+  ;;                = Build <tgt> instead of default targets.
+  ;; --config <cfg> = For multi-configuration tools, choose <cfg>.
+  ;; --clean-first  = Build target 'clean' first, then build.
+  ;;                  (To clean only, use --target 'clean'.)
+  ;; --resolve-package-references={on|only|off}
+  ;;                = Restore/resolve package references during build.
+  ;; -v, --verbose  = Enable verbose output - if supported - including
+  ;;                  the build commands to be executed.
+  ;; --             = Pass remaining options to the native tool.
+
 (transient-define-prefix teamake-build (build-path)
   "Invoke a build command on an already existing configuration."
   :value '("--verbose")

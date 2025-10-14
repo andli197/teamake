@@ -642,19 +642,17 @@ collection of PRESETS."
     (let ((selection (completing-read prompt mapped-collection '() t)))
       (funcall text-to-obj selection collection))))
 
-(defun teamake-preset--get-user-selectable-configure-presets (source-path)
-  "Read all user selectable configure presets from SOURCE-PATH."
-  (let ((presets (teamake-preset-parse-presets source-path)))
-    (seq-filter
-     (lambda (preset)
-       (and (eq (plist-get preset :category) :configurePresets)
-            (teamake-preset--is-visible preset)
-            (teamake-preset--is-condition-active-recursively preset presets)))
-     presets)))
+(defun teamake-preset--get-user-selectable-configure-presets (presets)
+  "Filter out user selectable configuration presets from PRESETS."
+  (seq-filter
+   (lambda (preset)
+     (and (eq (plist-get preset :category) :configurePresets)
+          (teamake-preset--is-visible preset)
+          (teamake-preset--is-condition-active-recursively preset presets)))
+   presets))
 
-(defun teamake-preset--get-user-selectable-build-presets (source-path)
-  "Read all user selectable build presets from SOURCE-PATH given `teamake-preset--selected-configuration'."
-  (let ((presets (teamake-preset-parse-presets source-path)))
+(defun teamake-preset--get-user-selectable-build-presets (presets)
+  "Filter out user selectable build presets from PRESETS."
   (seq-filter
    (lambda (preset)
      (and (eq (plist-get preset :category) :buildPresets)
@@ -662,43 +660,65 @@ collection of PRESETS."
                    (plist-get teamake-preset--selected-configuration :name))
           (teamake-preset--is-visible preset)
           (teamake-preset--is-condition-active-recursively preset presets)))
-   presets)))
-    
-(defun teamake-preset-select-configuration-preset (source-path preset)
+   presets))
+
+(defun teamake-preset-select-configuration-preset (source-path &optional preset)
   "Set `teamake-preset--selected-configuration' to PRESET.
 
 In interactive mode all presets are pared from SOURCE-PATH and
 user is interactively prompted to select one."
   (interactive
-   (let* ((source-path (teamake-code-root default-directory))
-         (preset (teamake-completing-read
-                  "Configuration preset: "
-                  (teamake-preset--get-user-selectable-configure-presets source-path)
-                  'teamake-preset--get-name-from-preset
-                  'teamake-preset--get-preset-from-name)))
-     (list source-path preset)))
-  (let ((presets (teamake-preset-parse-presets
-                  (teamake-code-root source-path))))
-    (setq teamake-preset--selected-configuration
-          (teamake-preset--fuse preset presets))
-    (teamake-preset--invoke-cmake-preset source-path preset)))
+   (let ((source-path (teamake-code-root default-directory)))
+     (list source-path)))
 
-(defun teamake-preset-select-build-preset (source-path preset)
+  (let ((presets (teamake-preset-parse-presets (teamake-code-root source-path))))
+    (setq teamake-preset--selected-configuration
+          (teamake-preset--fuse
+           (if preset preset
+             (teamake-completing-read
+              "Configuration preset: "
+              (teamake-preset--get-user-selectable-configure-presets presets)
+              'teamake-preset--get-name-from-preset
+              'teamake-preset--get-preset-from-name))
+           presets))))
+
+(defun teamake-preset-select-and-execute-configuration-preset (source-path &optional preset)
+  (interactive (list (teamake-code-root default-directory)))
+  (teamake-preset-select-configuration-preset source-path preset)
+  (teamake-preset--invoke-cmake-preset
+   source-path
+   teamake-preset--selected-configuration))
+
+(defun teamake-preset-select-build-preset (source-path &optional preset)
   "Set `teamake-preset--selected-build' to PRESET.
 
 In interactive mode all presets are pared from SOURCE-PATH and
-limited to `teamake-preset--selected-configuration' before user
-is interactively prompted to select one."
+user is interactively prompted to select one."
   (interactive
-   (let* ((source-path (teamake-code-root default-directory))
-         (preset (teamake-completing-read
-                  "Build preset: "
-                  (teamake-preset--get-user-selectable-build-presets source-path)
-                  'teamake-preset--get-name-from-preset
-                  'teamake-preset--get-preset-from-name)))
-     (list source-path preset)))
-  (setq teamake-preset--selected-build preset)
-  (teamake-preset--invoke-cmake-build-preset source-path preset))
+   (let ((source-path (teamake-code-root default-directory)))
+     (list source-path)))
+
+  (let* ((presets (teamake-preset-parse-presets (teamake-code-root source-path))))
+    (setq teamake-preset--selected-build
+          (teamake-preset--fuse
+           (if preset preset
+             (teamake-completing-read
+              "Build preset: "
+              (teamake-preset--get-user-selectable-build-presets presets)
+              'teamake-preset--get-name-from-preset
+              'teamake-preset--get-preset-from-name))
+           presets))))
+
+(defun teamake-preset-select-and-execute-build-preset (source-path &optional preset)
+  (interactive
+   (list (teamake-code-root default-directory)))
+
+  (teamake-preset-select-build-preset source-path preset)
+  (teamake-preset--invoke-cmake-build-preset
+   source-path
+   teamake-preset--selected-build))
+  
+  
 
 ;; Descriptions
 
@@ -719,9 +739,9 @@ is interactively prompted to select one."
   [:description
    (lambda ()
      (teamake-heading "Execute presets for" (transient-scope) 'teamake-code-tree-p))
-   ("c" teamake-preset-select-configuration-preset
+   ("c" teamake-preset-select-and-execute-configuration-preset
     :description teamake-preset--describe-configuration-preset)
-   ("b" teamake-preset-select-build-preset
+   ("b" teamake-preset-select-and-execute-build-preset
     :description teamake-preset--describe-build-preset)
    ]
   ["Custom target"

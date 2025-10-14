@@ -43,113 +43,193 @@
     (teamake-build build-tree)
     ))
 
-
-;; -C <initial-cache>           = Pre-load a script to populate the cache.
-;; -D <var>[:<type>]=<value>    = Create or update a cmake cache entry.
-;; -U <globbing_expr>           = Remove matching entries from CMake cache.
-
-;; --graphviz=<file>            = Generate graphviz of dependencies, see
-;;                                CMakeGraphVizOptions.cmake for more.
-;; --log-level=<ERROR|WARNING|NOTICE|STATUS|VERBOSE|DEBUG|TRACE>
-;;                              = Set the verbosity of messages from CMake
-;;                                files.  --loglevel is also accepted for
-;;                                backward compatibility reasons.
-;; --log-context                = Prepend log messages with context, if given
-;; --debug-trycompile           = Do not delete the try_compile build tree.
-;;                                Only useful on one try_compile at a time.
-;; --debug-output               = Put cmake in a debug mode.
-;; --debug-find                 = Put cmake find in a debug mode.
-;; --debug-find-pkg=<pkg-name>[,...]
-;;                              = Limit cmake debug-find to the
-;;                                comma-separated list of packages
-;; --debug-find-var=<var-name>[,...]
-;;                              = Limit cmake debug-find to the
-;;                                comma-separated list of result variables
-;; --trace                      = Put cmake in trace mode.
-;; --trace-expand               = Put cmake in trace mode with variable
-;;                                expansion.
-;; --trace-format=<human|json-v1>
-;;                              = Set the output format of the trace.
-;; --trace-source=<file>        = Trace only this CMake file/module.  Multiple
-;;                                options allowed.
-;; --trace-redirect=<file>      = Redirect trace output to a file instead of
-;;                                stderr.
-;; --warn-uninitialized         = Warn about uninitialized values.
-;; --no-warn-unused-cli         = Don't warn about command line options.
-;; --check-system-vars          = Find problems with variable usage in system
-;;                                files.
-;; --compile-no-warning-as-error= Ignore COMPILE_WARNING_AS_ERROR property and
-;;                                CMAKE_COMPILE_WARNING_AS_ERROR variable.
-;; --profiling-format=<fmt>     = Output data for profiling CMake scripts.
-;;                                Supported formats: google-trace
-;; --profiling-output=<file>    = Select an output path for the profiling data
-;;                                enabled through --profiling-format.
-
-(defvar teamake-configure--flag--fresh '() "Variable representing --fresh flag to CMake")
-(transient-define-infix teamake-configure-fresh ()
-  :class 'transient-lisp-variable
-  :variable 'teamake-configure--flag--fresh
-  :description "Create a fresh build tree, remove any pre-existing cache file (--fresh)"
-  :shortarg "--fresh")
+(defun teamake-configure--select-preset ()
+  (interactive)
+  (let ((code-path (transient-scope))
+        (values '()))
+    (call-interactively 'teamake-preset-select-configuration-preset code-path)
+    (let ((warnings (plist-get teamake-preset--selected-configuration :warnings))
+          (errors (plist-get teamake-preset--selected-configuration :errors))
+          (debug (plist-get teamake-preset--selected-configuration :debug))
+          (trace (plist-get teamake-preset--selected-configuration :trace)))
+      (if warnings
+          (progn
+            (if (plist-member warnings :dev)
+                (add-to-list 'values (if (eq (plist-get warnings :dev) :json-false)
+                                         "-Wno-dev"
+                                       "-Wdev")))
+            (if (plist-member warnings :deprecated)
+                (add-to-list 'values (if (eq (plist-get warnings :deprecated) :json-false)
+                                         "-Wno-deprecated"
+                                       "-Wdeprecated")))
+            (if (and (plist-member warnings :uninitialized)
+                     (not (eq (plist-get warnings :uninitialized) :json-false)))
+                (add-to-list 'values "--warn-uninitialized"))
+            (if (and (plist-member warnings :unusedCli)
+                     (eq (plist-get warnings :unusedCli) t))
+                (add-to-list 'values "--no-warn-unused-cli"))
+            (if (and (plist-member warnings :systemVars)
+                     (not (eq (plist-get warnings :systemVars) :json-false)))
+                (add-to-list 'values "--check-system-vars"))
+            )
+        )
+      (if errors
+          (progn
+            (if (plist-member errors :dev)
+                (add-to-list 'values (if (eq (plist-get errors :dev) :json-false)
+                                         "Wno-error=dev"
+                                       "-Werror=dev")))
+            (if (plist-member errors :deprecated)
+                (add-to-list 'values (if (eq (plist-get errors :deprecated) :json-false)
+                                         "Wno-error=deprecated"
+                                       "-Werror=deprecated")))
+            )
+        )
+      (if debug
+          (progn
+            (if (plist-get debug :output) (add-to-list 'values "--debug-output"))
+            (if (plist-get debug :tryCompile) (add-to-list 'values "--debug-trycompile"))
+            (if (plist-get debug :find) (add-to-list 'values "--debug-find"))
+            )
+        )
+      (if trace
+          (progn
+            (if (plist-member trace :mode) (cond ((string= (plist-get trace :mode) "on")
+                                                  (add-to-list 'values "--trace"))
+                                                 ((string= (plist-get trace :mode) "off") ;; nop
+                                                  )
+                                                 ((string= (plist-get trace :mode) "expand")
+                                                  (add-to-list 'values "--trace-expand"))))
+            (if (plist-member trace :format) (cond ((string= (plist-get trace :format) "human")
+                                                    (add-to-list 'values "--trace-format=human"))
+                                                   ((string= (plist-get trace :format) "json-v1")
+                                                    (add-to-list 'values "--trace-format=json-v1"))))
+            (if (plist-member trace :source) (seq-do
+                                              (lambda (file)
+                                                (add-to-list 'values (format "--trace-source=%s" file)))
+                                              (teamake-preset--get-property-as-list trace :source)))
+            (if (plist-member trace :redirect) (add-to-list 'values (format "--trace-redirect=%s" (plist-get trace :redirect))))
+            )
+        )
+      (if (plist-member teamake-preset--selected-configuration :generator)
+          (add-to-list 'values (format "-G=%s" (plist-get teamake-preset--selected-configuration :generator))))
+      (if (plist-member teamake-preset--selected-configuration :toolchainFile)
+          (add-to-list 'values (format "--toolchain=%s" (plist-get teamake-preset--selected-configuration :toolchainFile))))
+      (if (plist-member teamake-preset--selected-configuration :graphviz)
+          (add-to-list 'values (format "--graphviz=%s" (plist-get teamake-preset--selected-configuration :graphviz))))
+      (if (plist-member teamake-preset--selected-configuration :binaryDir)
+          (add-to-list 'values (format "-B=%s" (plist-get teamake-preset--selected-configuration :binaryDir))))
+      (if (plist-member teamake-preset--selected-configuration :installDir)
+          (add-to-list 'values (format "--install-prefix=%s" (plist-get teamake-preset--selected-configuration :installDir))))
+      (if (plist-member teamake-preset--selected-configuration :architecture)
+          (add-to-list 'values (format "-A=%s" (plist-get teamake-preset--selected-configuration :architecture))))
+      (if (plist-member teamake-preset--selected-configuration :toolset)
+          (add-to-list 'values (format "-T=%s" (plist-get teamake-preset--selected-configuration :toolset))))
+      )
+    (message "%s" values)
+    (transient-setup
+     'teamake-configure '() '()
+     :scope code-path
+     :value values)
+    ))
 
 (transient-define-prefix teamake-configure (code-path)
   "Invoke a Teamake configuration step."
   :value '("-Wdev" "-Wno-error=dev" "-Wdeprecated" "-Wno-error=deprecated")
-  [:if (lambda () (teamake-code-tree-p (transient-scope)))
-   :description
-   (lambda ()
-     (concat (teamake-heading "Configure " (transient-scope) 'teamake-code-tree-p)
-             "\n\n"
-             (propertize "Flags and switches" 'face 'teamake-heading)))
-    ("f" teamake-configure-fresh)
-    ("-f" "Create a fresh build tree, remove any pre-existing cache file" "--fresh")
-    ("-w" "Enable developer warnings" "-Wdev")
-    ("-W" "Suppress developer warnings" "-Wno-dev")
-    ("-e" "Make developer warnings errors." "-Werror=dev")
-    ("-E" "Make developer warnings not errors." "-Wno-error=dev")
-    ("-d" "Enable deprecation warnings" "-Wdeprecated")
-    ("-D" "Suppress deprecation warnings" "-Wno-deprecated")
-    ("-c" "Make deprecated macro and function warnings errors" "-Werror=deprecated")
-    ("-C" "Make deprecated macro and function warnings not errors" "-Wno-error=deprecated")
-    ("--debug" "Put CMake in a debug mode." "--debug-output")
-    ]
-  ["Settings"
-   ("b" "Build path" "-B="
-    :prompt "Build path"
-    :reader transient-read-directory)
-   ("i" "Installation path" "--install-prefix="
-    :prompt "Install"
-    :reader transient-read-directory)
-   ("g" "Generator" "-G="
-    :prompt "Generator"
-    :choices (lambda () (teamake-configure--list-generators)))
-   ("p" "Preset" "--preset="
-    :prompt "Select preset"
-    :choices (lambda () (teamake-presets-get-configuration-presets
-                         (transient-arg-value "-S=" (transient-args transient-current-command)))))
-   ("T" "Toolset" "-T=" :prompt "Toolset")
-   ("a" "Platform" "-A=" :prompt "Platform")
-   ("t" "Toolchain file" "--toolchain="
-     :prompt "Toolchain"
-     :reader transient-read-file)
-   ("c" "Pre-load a script to populate the cache" "-C="
-    :prompt "Select cache varmup script "
-    :reader transient-read-file)
-   ("d" "Create or update a CMake cache entry." "-D="
-    :prompt "Entries (<var>[:<type>]=<value>): ")
-;; -U <globbing_expr>           = Remove matching entries from CMake cache.
-
-   ("x" teamake-configure-execute
-    :description "Configure using current configuration")
-   ("X" teamake-configure--build-menu
-    :description "Open build menu for configured build tree")
+  [:description (lambda ()
+                  (concat (teamake-heading "Configure " (transient-scope) 'teamake-code-tree-p)
+                          "\n\n"
+                          (teamake-heading "Warnings" '() 'teamake-code-tree-p)))
+   ("-ww" "Enable developer warnings" "-Wdev")
+   ("-wW" "Suppress developer warnings" "-Wno-dev")
+   ("-we" "Make developer warnings errors" "-Werror=dev")
+   ("-wE" "Make developer warnings not errors" "-Wno-error=dev")
+   ("-wd" "Enable deprecation warnings" "-Wdeprecated")
+   ("-wD" "Suppress deprecation warnings" "-Wno-deprecated")
+   ("-wm" "Make deprecated macro and function warnings errors" "-Werror=deprecated")
+   ("-wM" "Make deprecated macro and function warnings not errors" "-Wno-error=deprecated")
    ]
+  ["Misc"
+   ("-f" "Configure a fresh build tree, removing any existing cache file" "--fresh")
+   ("-n" "View mode only" "-N")
+   ("-u" "Warn about uninitialized values" "--warn-uninitialized")
+   ]
+  ["Debug"
+   ("-cli" "Don't warn about command line options" "--no-warn-unused-cli")
+   ("-csv" "Find problems with variable usage in system files" "--check-system-vars")
+   ("-cne" "Compile no warnings as error" "--compile-no-warning-as-error")
+   ("-lc" " Prepend log messages with context, if given" "--log-context")
+   ("-dt" " Do not delete the try_compile build tree" "--debug-trycompile")
+   ("-do" " Put cmake in a debug mode" "--debug-output")
+   ("-df" " Put cmake in a debug mode" "--debug-find")
+   ("dfp" "Limit cmake debug-find to the comma-separated list of packages"
+    "--debug-find-pkg="
+    :prompt "Packages (comma separated): ")
+   ("dfv" "Limit cmake debug-find to the comma-separated list of result variables"
+    "--debug-find-var="
+    :prompt "Variables (comma separated): ")
+   ("dsi" "Dump information about this system" "--system-information="
+    :prompt "Select system dump file: "
+    :reader transient-read-file)
+   ]
+  ["Trace"
+   ("-tr" "Put cmake in trace mode" "--trace")
+   ("-te" "Put cmake in trace mode with variable expansion" "--trace-expand")
+   ("tf" "Set the output format of the trace" "--trace-format="
+    :prompt "Format: "
+    :choices ("human" "json-v1"))
+   ("ts" "Trace only this CMake file/module" "trace-source="
+    :prompt "CMake file/module: "
+    :reader transient-read-file)
+   ("tr" "Redirect trace output to a file instead of stderr" "--trace-redirect="
+    :prompt "Trace output: "
+    :reader transient-read-file)
+   ]
+   
+  ["Options"
+   ("b" " Build path" "-B="
+    :prompt "Build path: "
+    :reader transient-read-directory)
+   ;; -D <var>[:<type>]=<value>    = Create or update a cmake cache entry.
+   ("dd" "Manually create or update a CMake cache entry" "-D="
+    )
+   ("ge" "Generator" "-G="
+    :prompt "Generator: "
+    :choices (lambda () (teamake-configure--list-generators)))
+   ("ts" "Specify toolset name if supported by generator" "-T="
+    :prompt "Toolset: ")
+   ("a" " Specify platform name if supported by generator" "-A="
+    :prompt "Platform: ")
+   ("tc" "Toolchain file" "--toolchain="
+    :prompt "Toolchain: "
+    :reader transient-read-file)
+   ("i" " Installation path" "--install-prefix="
+    :prompt "Install path: "
+    :reader transient-read-directory)
+   ("po" "Output format for profiling CMake scripts" "--profiling-format="
+    :prompt "Select format: "
+    :choices ("google-trace"))
+   ("pf" "Select an output path for the profiling data" "--profiling-output="
+    :prompt "Select profiling output: "
+    :reader transient-read-file)
+   ;; --preset <preset>,--preset=<preset>
+   ;;                              = Specify a configure preset.
+   ("pr" teamake-configure--select-preset
+    :description "Read configuration from preset")
+   ("gr" "Generate graphviz of dependencies" "--graphviz="
+    :prompt "Graphviz output: "
+    :reader transient-read-file)
+   ("l" " Set the verbosity of message from CMake files." "--log-level="
+    :prompt "Select log level: "
+    :choices ("ERROR" "WARNING" "NOTICE" "STATUS" "VERBOSE" "DEBUG" "TRACE"))
+   ]
+  ["Do"
+   ("C" teamake-configure-execute
+    :description "Run configuration")]
   ["Help"
-    ("h" "CMake help menu" teamake-cmake-help)]
+   ("h" "CMake help menu" teamake-cmake-help)]
   (interactive (list (teamake-code-root default-directory)))
-  (transient-setup 'teamake-configure '() '() :scope code-path)
-  )
-  
+  (transient-setup 'teamake-configure '() '() :scope code-path))
 
 (provide 'teamake-configure)
 ;;; teamake-configure.el ends here
