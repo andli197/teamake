@@ -12,8 +12,8 @@ Defaults to `shell-file-name'"
   :group 'teamake-commands)
 
 (defcustom teamake-process-cmake-tool-path
-  (file-name-directory (locate-file "cmake" exec-path exec-suffixes))
-  "Location of the cmake tools executables.
+  (locate-file "cmake" exec-path exec-suffixes)
+  "Location of the cmake executable.
 
 Used in calls to cmake, ctest, cpack, etc.
 If they are available on PATH this variable is not required to be set."
@@ -70,20 +70,16 @@ be atempted to be deduced.  Otherwise it is assumed to be the name."
 Locate the TOOL from cmake tool suite (cmake, ctest, cpack)
 using the configured `teamake-process-cmake-tool-path' or
 default configured PATH as a fallback."
-  (let* ((program (or tool "cmake"))
-        (location program))
-    (setq location
-          (teamake-return-value-or-default
-           (file-name-concat teamake-process-cmake-tool-path program)
-           program))
-
-    (if (not (file-exists-p location))
-        (setq location (locate-file program exec-path exec-suffixes t)))
-
-    (unless (and program (file-exists-p location))
-      (user-error "Unable to locate program %s" program))
-
-    location))
+  (if (file-exists-p tool)
+      tool
+    (let* ((program (or tool "cmake"))
+           (location program)
+           (locations exec-path))
+      (add-to-list 'locations (file-name-directory teamake-process-cmake-tool-path))
+      (setq location (locate-file program locations exec-suffixes t))
+      (unless (file-exists-p location)
+        (user-error "Unable to locate program %s" program))
+      location)))
 
 (defun teamake-process-invoke-cmake (path-or-buffer-name &rest args)
   "Start processing a CMake command with ARGS.
