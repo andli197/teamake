@@ -20,17 +20,58 @@
           (setq pos (match-end 0))))
       (setq generators (reverse generators)))))
 
+(defun teamake-directory-name (path)
+  "Return the directory name of the PATH."
+  (let* ((source-parent-dir (file-name-directory (directory-file-name path))))
+    (substring (directory-file-name path)
+               (length source-parent-dir))))
+
+(defun teamake-host-system-name ()
+  "Return host system name as simple string as CMake usually use."
+  (cond ((string= system-type "gnu/linux") "Linux")
+        ((string= system-type "windows-nt") "Windows")
+        ((string= system-type "darwin") "Darwin")
+        (t system-type)))
+
+(defun teamake-configure--create-variable-expansion-map (source-dir)
+  "Create a variable expansion map for SOURCE-DIR."
+  (list
+   (cons "${sourceDir}"  source-dir)
+   (cons "${sourceParentDir}" (file-name-directory (directory-file-name source-dir)))
+   (cons "${sourceDirName}" (teamake-directory-name source-dir))
+   (cons "${dollar}" "$")
+   (cons "${hostSystemName}" (teamake-host-system-name))
+   (cons "${pathListSep}" path-separator)))
+
+(defun teamake-apply-replacement-map (map input)
+  "Apply each replacement from MAP in INPUT and return the result."
+  (let ((result input))
+    (seq-do
+     (lambda (exp)
+       (setq result (replace-regexp-in-string (car exp) (cdr exp) result)))
+     map)
+    result))
+
+(defun teamake-expand-known-macros (source-dir &rest input)
+  "Expand known macros for configuration of SOURCE-DIR with INPUT as flags."
+  (let ((macro-replacement-map (teamake-configure--create-variable-expansion-map source-dir)))
+    (seq-map
+     (lambda (arg)
+       (teamake-apply-replacement-map macro-replacement-map arg))
+     input)))
+
 (defun teamake-configure-execute ()
   "Execute the currently configured Teamake command."
   (interactive)
   (let ((command (transient-args transient-current-command))
         (source-path (transient-scope transient-current-command)))
-    (setq command (seq-map (lambda (arg) (string-replace "=" " " arg)) command))
     (apply #'teamake-process-invoke-cmake
            default-directory
            "-S"
            source-path
-           command)))
+           (apply #'teamake-expand-known-macros
+                  source-path
+                  command))))
 
 (defun teamake-configure--build-menu ()
   (interactive)
@@ -42,6 +83,26 @@
     ;; (transient-setup 'teamake-build '() '() :scope build-tree)
     (teamake-build build-tree)
     ))
+
+(defun teamake--string-from-key (key)
+  "Remove the leading :-sign from the KEY."
+  (let ((string-key (format "%s" key)))
+    (substring string-key 1)))
+
+(defun teamake-configure--cache-variables-as-switches (cache-variables-plist)
+  "Create statements like <key>=<val> from CACHE-VARIABLES-PLIST."
+  (let* ((values '())
+         (counter 0)
+         (key (nth counter cache-variables-plist))
+         (value (plist-get cache-variables-plist key)))
+    (while key
+      (add-to-list 'values (format "%s=%s" (teamake--string-from-key key) value))
+      (setq counter (+ counter 2)
+            key (nth counter cache-variables-plist)
+            value (plist-get cache-variables-plist key)))
+    values
+    )
+  )
 
 (defun teamake-configure--select-preset ()
   (interactive)
@@ -111,6 +172,14 @@
             (if (plist-member trace :redirect) (add-to-list 'values (format "--trace-redirect=%s" (plist-get trace :redirect))))
             )
         )
+      (if (plist-member teamake-preset--selected-configuration :cacheVariables)
+          (seq-do
+           (lambda (val)
+             (add-to-list 'values (format "-D%s" val)))
+           (teamake-configure--cache-variables-as-switches
+            (plist-get teamake-preset--selected-configuration :cacheVariables)))
+        )
+
       (if (plist-member teamake-preset--selected-configuration :generator)
           (add-to-list 'values (format "-G=%s" (plist-get teamake-preset--selected-configuration :generator))))
       (if (plist-member teamake-preset--selected-configuration :toolchainFile)
@@ -190,7 +259,7 @@
     :prompt "Build path: "
     :reader transient-read-directory)
    ;; -D <var>[:<type>]=<value>    = Create or update a cmake cache entry.
-   ("D" " Create or update a cmake cache entry." "-D "
+   ("D" " Create or update a cmake cache entry." "-D"
     :class transient-option
     :prompt "List entries as <var>[:<type>]=<value> and comma separate them: "
     :multi-value repeat)
