@@ -68,13 +68,51 @@ different trees."
   (let ((string-key (format "%s" key)))
     (substring string-key 1)))
 
-(defun teamake--get-macro (macro-expr)
-  "Extract the variable MACRO-EXPR from `teamake' transient."
-  (if (not (s-ends-with? "=" macro-expr))
-      (setq macro-expr (concat macro-expr "=")))
-  (transient-arg-value macro-expr (transient-args 'teamake)))
+(defun teamake--try-known-variables (expression)
+  "Try fetching EXPRESSION from predefined variables."
+  (transient-arg-value expression (transient-args 'teamake)))
 
-(defun teamake-get-variable-value-litteral (name)
+(defun teamake--try-custom-variables (name)
+  "Try fetching NAME from the additional variables set.
+
+They need not to be specified as ${name}=value but may also be specified
+as name=value and the transient value has also -V flag in front of it."
+  (let ((flag "-V"))
+    (or (transient-arg-value (format "%s%s=" flag name) (transient-args 'teamake))
+        (transient-arg-value (format "%s${%s}=" flag name) (transient-args 'teamake)))))
+
+(defun teamake--get-transient-variable (macro-expr)
+  "Return the transient MACRO-EXPR value."
+  (let ((suffix ""))
+    (if (not (s-ends-with? "=" macro-expr))
+        (setq suffix "="))
+    (or (teamake--try-known-variables (concat macro-expr suffix))
+        (teamake--try-custom-variables
+         (substring macro-expr 2
+                    (- (length macro-expr) 1))))))
+
+(defun teamake--get-macro-value (macro-expr)
+  "Extract the variable MACRO-EXPR from `teamake' transient or the known macros.
+
+The known macros are:
+ ${sourceParentDir} = Deduced from ${sourceDir}
+ ${sourceDirName}   = Deduced from ${sourceDir}
+ ${dollar}          = Litteral \"$\" sign
+ ${hostSystemName}  = Translates to Linux/Windows/Darwin
+ ${pathListSep}     = `path-separator'"
+  (let ((source-dir (transient-arg-value "${sourceDir}=" (transient-args 'teamake))))
+    (cond ((string= macro-expr "${sourceParentDir}")
+           (file-name-directory (directory-file-name source-dir)))
+          ((string= macro-expr "${sourceDirName}")
+           (teamake-directory-name source-dir))
+          ((string= macro-expr "${dollar}") "$")
+          ((string= macro-expr "${hostSystemName}")
+           (teamake-host-system-name))
+          ((string= macro-expr "${pathListSep}")
+           path-separator)
+          (t (teamake--get-transient-variable macro-expr)))))
+
+(defun teamake-get-variable-value (name)
   "Extract the variable NAME from `teamake' transient.
 
 If name is not wrapped as a variable expression, wrap it
@@ -85,7 +123,9 @@ before fetching value."
         (setq prefix ""))
     (if (s-ends-with? suffix name)
         (setq suffix ""))
-    (teamake--get-macro (concat prefix name suffix))))
+    (or (teamake--get-macro-value
+         (concat prefix name suffix))
+        name)))
 
 (defun teamake-expand-macro-expression (expression)
   "Fully expand all macros in EXPRESSION."
@@ -94,25 +134,25 @@ before fetching value."
         expression
       (let ((macro (match-string 0 expression)))
         (message "{macro=%s}" macro)
-        (setq expression
+        (setq expansion
               (string-replace macro
-                              (teamake-get-variable-value-litteral macro)
+                              (teamake-get-variable-value macro)
                               expression))
-        (teamake-expand-macro-expression expression)))))
-
-;; (teamake-expand-macro-expression "${buildDir}")
+        (if (string= expansion expression)
+            (error "No known definition for '%s' found!" macro))
+        (teamake-expand-macro-expression expansion)))))
 
 (defun teamake-project-name ()
   "Return ${project} tag or deduced name from the current scope."
-  (teamake-get-variable-value-litteral "${project}"))
+  (teamake-get-variable-value "${project}"))
 
 (defun teamake-source-dir ()
   "Return current source directory."
-  (teamake-get-variable-value-litteral "${sourceDir}"))
+  (teamake-get-variable-value "${sourceDir}"))
 
 (defun teamake-build-dir ()
   "Return current build directory."
-  (teamake-get-variable-value-litteral "${buildDir}"))
+  (teamake-get-variable-value "${buildDir}"))
 
 (defun teamake--common-macro-map (source-dir)
   "Create a variable expansion map for SOURCE-DIR."
