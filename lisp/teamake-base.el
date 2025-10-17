@@ -1,6 +1,9 @@
 
 ;;; Code:
 
+(require 'transient)
+(require 's)
+
 ;; Group definitions
 (defgroup teamake '()
   "Teamake integration in Emacs using 'transient."
@@ -59,6 +62,86 @@ different trees."
         (push (match-string 0 string) matches)
         (setq pos (match-end 0)))
       (reverse matches))))
+
+(defun teamake--string-from-key (key)
+  "Remove the leading :-sign from the KEY."
+  (let ((string-key (format "%s" key)))
+    (substring string-key 1)))
+
+(defun teamake-project-name ()
+  "Return ${project} tag or deduced name from the current scope."
+  (transient-arg-value "${project}=" (transient-args 'teamake)))
+
+(defun teamake-source-dir ()
+  "Return current source directory."
+  (transient-arg-value "${sourceDir}=" (transient-args 'teamake)))
+
+(defun teamake-build-dir ()
+    "Return current build directory."
+    (transient-arg-value "${buildDir}=" (transient-args 'teamake)))
+
+(defun teamake--known-macro-map (source-dir)
+  "Create a variable expansion map for SOURCE-DIR."
+  (list
+   (cons "${sourceParentDir}" (file-name-directory (directory-file-name source-dir)))
+   (cons "${sourceDirName}" (teamake-directory-name source-dir))
+   (cons "${dollar}" "$")
+   (cons "${hostSystemName}" (teamake-host-system-name))
+   (cons "${pathListSep}" path-separator)))
+
+(defun teamake-replacement-map (source-dir)
+  "Create a general replacement map."
+  (let ((known-map (teamake--known-macro-map source-dir)))
+    (if transient-current-prefix
+        (seq-map
+         (lambda (item)
+           (let* ((equal-sign (string-match "=" item))
+                  (token (substring item 0 equal-sign))
+                  (value (substring item (+ equal-sign 1))))
+             (if (s-starts-with? "-V" token)
+                 (let ((prefix "${")
+                       (suffix "}"))
+                   (setq token (substring token 2))
+                   (if (s-starts-with? prefix token)
+                       (setq prefix ""))
+                   (if (s-ends-with? suffix token)
+                       (setq suffix ""))
+                   (setq token (concat prefix token suffix))))
+             (push (token . value) known-map)
+             ))
+         (transient-args 'teamake)))
+    known-map))
+
+(defun teamake-expand-known-macros (source-dir &rest input)
+  "Expand known macros for configuration of SOURCE-DIR with INPUT as flags."
+  (let ((configuration-map (teamake-replacement-map source-dir)))
+    (seq-map
+     (lambda (arg) (teamake-apply-replacement-map configuration-map arg))
+     input)))
+
+(defun teamake-directory-name (path)
+  "Return the directory name of the PATH."
+  (let* ((source-parent-dir (file-name-directory (directory-file-name path))))
+    (substring (directory-file-name path)
+               (length source-parent-dir))))
+
+(defun teamake-host-system-name ()
+  "Return host system name as simple string as CMake usually use."
+  (cond ((string= system-type "gnu/linux") "Linux")
+        ((string= system-type "windows-nt") "Windows")
+        ((string= system-type "darwin") "Darwin")
+        (t system-type)))
+
+(defun teamake-apply-replacement-map (map input)
+  "Apply each replacement from MAP in INPUT and return the result.
+
+MAP should be a association list with each item is (REGEXP . REPLACEMENT)."
+  (let ((result input))
+    (seq-do
+     (lambda (exp)
+       (setq result (replace-regexp-in-string (car exp) (cdr exp) result)))
+     map)
+    result))
 
 (defun teamake-return-value-or-default (variable default-value)
   "Return the value of VARIABLE if it is non empty, otherwise DEFAULT-VALUE."

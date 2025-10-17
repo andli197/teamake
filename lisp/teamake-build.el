@@ -19,75 +19,104 @@ target in the build tree."
    "--target"
    "help"))
 
-(defun teamake-build-execute-build (build-path)
+(defun teamake-build--do-build ()
   "Invoke compilation using the current configuration at BUILD-PATH."
-  (interactive (list (teamake-build-root default-directory)))
+  (interactive)
   (apply #'teamake-process-invoke-cmake
-            build-path
+            (transient-scope)
             "--build"
-            build-path
+            (transient-scope)
             (transient-args transient-current-command)))
+
+(defun teamake-build--do-build-preset ()
+  "Prompt for build preset and run build from selection."
+  (interactive)
+  (apply #'teamake-process-invoke-cmake
+         (transient-scope)
+         "--build"
+         (transient-scope)
+         "--preset=dafdsfadsf"))
 
 (transient-define-suffix teamake--invoke-cache ()
   (interactive)
   (transient-setup 'teamake-cache '() '() :scope (transient-scope)))
 
-  ;; --parallel [<jobs>], -j [<jobs>]
-  ;;                = Build in parallel using the given number of jobs.
-  ;;                  If <jobs> is omitted the native build tool's
-  ;;                  default number is used.
-  ;;                  The CMAKE_BUILD_PARALLEL_LEVEL environment variable
-  ;;                  specifies a default parallel level when this option
-  ;;                  is not given.
-  ;; -t <tgt>..., --target <tgt>...
-  ;;                = Build <tgt> instead of default targets.
-  ;; --config <cfg> = For multi-configuration tools, choose <cfg>.
-  ;; --clean-first  = Build target 'clean' first, then build.
-  ;;                  (To clean only, use --target 'clean'.)
-  ;; --resolve-package-references={on|only|off}
-  ;;                = Restore/resolve package references during build.
-  ;; -v, --verbose  = Enable verbose output - if supported - including
-  ;;                  the build commands to be executed.
-  ;; --             = Pass remaining options to the native tool.
+(defun teamake-build--describe ()
+  "Create a description of the current build."
+  (concat "CMake Build "
+          (propertize (teamake-project-name) 'face 'teamake-name)
+          " ("
+          (propertize (transient-scope) 'face 'teamake-path)
+          ")\n"))
 
-(transient-define-prefix teamake-build (build-path)
+;; export function buildArgs(preset: BuildPreset, tempOverrideArgs?: string[], tempOverrideBuildToolArgs?: string[]): string[] {
+;;     const result: string[] = [];
+
+;;     preset.__binaryDir && result.push('--build', preset.__binaryDir);
+;;     preset.jobs && result.push('--parallel', preset.jobs.toString());
+;;     preset.configuration && result.push('--config', preset.configuration);
+;;     preset.cleanFirst && result.push('--clean-first');
+;;     preset.verbose && result.push('--verbose');
+
+;;     if (util.isString(preset.__targets)) {
+;;         result.push('--target', preset.__targets);
+;;     } else if (util.isArrayOfString(preset.__targets)) {
+;;         result.push('--target', ...preset.__targets);
+;;     }
+
+;;     tempOverrideArgs && result.push(...tempOverrideArgs);
+;;     if (preset.nativeToolOptions || tempOverrideBuildToolArgs) {
+;;         result.push('--');
+;;         preset.nativeToolOptions && result.push(...preset.nativeToolOptions);
+;;         tempOverrideBuildToolArgs && result.push(...tempOverrideBuildToolArgs);
+;;     }
+
+;;     return result;
+;; }
+
+(defun teamake-build--get-build-path ()
+  "Get build-path from either deduced ${buildPath} or `default-directory'"
+  (if transient-current-prefix
+      (transient-arg-value "${buildDir}=" (transient-args 'teamake))
+    (teamake-get-root default-directory 'teamake-build-tree-p)))
+
+(transient-define-prefix teamake-build ()
   "Invoke a build command on an already existing configuration."
   :value '("--verbose")
-  [:if (lambda () (teamake-build-tree-p (transient-scope)))
-   :description
-   (lambda ()
-     (concat
-      (teamake-heading "Build" (transient-scope) 'teamake-build-tree-p)
-      "\n\n"
-      (propertize "Flags" 'face 'teamake-heading)))
-   ("-c" "Build target 'clean' first, then build" "--clean-first")
-   ("-v" "Verbose output" "--verbose")
+  [:description
+   (lambda () (teamake-build--describe))
+   ["Flags"
+    ("-c" "Build target 'clean' first, then build" "--clean-first")
+    ("-v" "Verbose output" "--verbose")
+    ]
+   ["Options"
+    ("pr" "Read settings from a build preset" "--preset="
+     :prompt "Select preset: ")
+    ("pa" "Parallel builds, using this amount of jobs" "--parallel="
+     :prompt "Parallel builds: "
+     :reader transient-read-number-N+)
+    ("ta" "Build target instead of default targets" "--target="
+     :prompt "Targets: "
+     :choices (lambda () (teamake-build--read-build-targets (transient-scope)))
+     :multi-value repeat)
+    ("cf" "For multi configuration tools" "--target="
+     :prompt "Configuration: "
+     :choices ("Release" "Debug" "RelWithDebInfo"))
+    ("rp" "Restore/resolve package references during build"
+     "--resolve-package-references="
+     :prompt "Select package restore/resolve: "
+     :choices ("on" "only" "off"))]
    ]
-  [:if (lambda () (teamake-build-tree-p (transient-scope)))
-   :description "Build"
-   ("c" "For multi-configuration tools" "--config="
-    :prompt "Configuration "
-    :choices ("Debug" "RelWithDebInfo" "Release"))
-   ("t" "Build <target> instead of default targets" "--target="
-    :prompt "Target "
-    :choices (lambda () (teamake-build--read-build-targets (transient-scope))))
-   ("p" "Build in parallel using the given number of jobs" "--parallel="
-    :prompt "Amount "
-    :reader transient-read-number-N+)
-   ("d" "Modify cache" teamake--invoke-cache
-    :transient transient--do-recurse)
-   ]
-  [:if (lambda () (teamake-build-tree-p (transient-scope)))
-   :description "Execute"
-   ("x" teamake-build-execute-build
-    :description "Build current tree")
+  ["Do"
+   ("xx" "Build current tree" teamake-build--do-build)
+   ("xp" "Build using preset" teamake-build--do-build-preset)
    ]
   ["Help"
    ("h" "CMake help menu" teamake-cmake-help)
    ]
+  
   (interactive (list (teamake-build-root default-directory)))
-  (transient-setup 'teamake-build '() '() :scope build-path)
-  )
+  (transient-setup 'teamake-build '() '()))
 
 (provide 'teamake-build)
 ;;; teamake-build.el ends here
