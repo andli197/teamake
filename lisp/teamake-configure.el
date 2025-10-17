@@ -23,19 +23,14 @@
 (defun teamake-configure--do-configure ()
   "Execute the currently configured Teamake command."
   (interactive)
-  (let ((command (transient-args transient-current-command))
-        (source-path (teamake-source-dir))
-        (build-path (teamake-build-dir)))
-
-    ;; (apply #'teamake-expand-known-macros
-    ;;        source-path
-    ;;        command)
-
+  (let ((command (transient-args 'teamake-configure)))
     (apply #'teamake-process-invoke-cmake
            default-directory
            "-S"
            source-path
-           command)))
+           (seq-map (lambda (cmd)
+                      (teamake-expand-macro-expression cmd))
+                    command))))
 
 (defun teamake-configure--cache-variables-as-switches (cache-variables-plist)
   "Create statements like <key>=<val> from CACHE-VARIABLES-PLIST."
@@ -152,7 +147,7 @@
 
 (defun teamake-configure--select-preset ()
   (interactive)
-  (call-interactively 'teamake-preset-select-configuration-preset (teamake-source-dir))
+  (teamake-preset-select-configuration-preset (teamake-source-dir))
   (transient-setup 'teamake-configure '() '()
                    :value (teamake-configure--preset-to-values
                            teamake-preset--selected-configuration)))

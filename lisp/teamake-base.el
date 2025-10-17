@@ -99,7 +99,7 @@ The known macros are:
  ${sourceDirName}   = Deduced from ${sourceDir}
  ${dollar}          = Litteral \"$\" sign
  ${hostSystemName}  = Translates to Linux/Windows/Darwin
- ${pathListSep}     = `path-separator'"
+ ${pathListSep}     = path-separator"
   (let ((source-dir (transient-arg-value "${sourceDir}=" (transient-args 'teamake))))
     (cond ((string= macro-expr "${sourceParentDir}")
            (file-name-directory (directory-file-name source-dir)))
@@ -153,44 +153,6 @@ before fetching value."
 (defun teamake-build-dir ()
   "Return current build directory."
   (teamake-get-variable-value "${buildDir}"))
-
-(defun teamake--common-macro-map (source-dir)
-  "Create a variable expansion map for SOURCE-DIR."
-  (list
-   (cons "${sourceParentDir}" (file-name-directory (directory-file-name source-dir)))
-   (cons "${sourceDirName}" (teamake-directory-name source-dir))
-   (cons "${dollar}" "$")
-   (cons "${hostSystemName}" (teamake-host-system-name))
-   (cons "${pathListSep}" path-separator)))
-
-
-(defun teamake-replacement-map (source-dir)
-  "Create a general replacement map."
-  (let ((known-map (teamake--common-macro-map source-dir)))
-    (seq-map
-     (lambda (item)
-       (let* ((equal-sign (string-match "=" item))
-              (token (substring item 0 equal-sign))
-              (value (substring item (+ equal-sign 1))))
-         (if (s-starts-with? "-V" token)
-             (let ((prefix "${")
-                   (suffix "}"))
-               (setq token (substring token 2))
-               (if (s-starts-with? prefix token)
-                   (setq prefix ""))
-               (if (s-ends-with? suffix token)
-                   (setq suffix ""))
-               (setq token (concat prefix token suffix))))
-         (push (token . value) known-map)))
-     (transient-args 'teamake))
-  known-map))
-
-(defun teamake-expand-known-macros (source-dir &rest input)
-  "Expand known macros for configuration of SOURCE-DIR with INPUT as flags."
-  (let ((configuration-map (teamake-replacement-map source-dir)))
-    (seq-map
-     (lambda (arg) (teamake-apply-replacement-map configuration-map arg))
-     input)))
 
 (defun teamake-directory-name (path)
   "Return the directory name of the PATH."
