@@ -68,19 +68,53 @@ different trees."
   (let ((string-key (format "%s" key)))
     (substring string-key 1)))
 
+(defun teamake--get-macro (macro-expr)
+  "Extract the variable MACRO-EXPR from `teamake' transient."
+  (if (not (s-ends-with? "=" macro-expr))
+      (setq macro-expr (concat macro-expr "=")))
+  (transient-arg-value macro-expr (transient-args 'teamake)))
+
+(defun teamake-get-variable-value-litteral (name)
+  "Extract the variable NAME from `teamake' transient.
+
+If name is not wrapped as a variable expression, wrap it
+before fetching value."
+  (let ((prefix "${")
+        (suffix "}"))
+    (if (s-starts-with? prefix name)
+        (setq prefix ""))
+    (if (s-ends-with? suffix name)
+        (setq suffix ""))
+    (teamake--get-macro (concat prefix name suffix))))
+
+(defun teamake-expand-macro-expression (expression)
+  "Fully expand all macros in EXPRESSION."
+  (save-match-data
+    (if (not (string-match "${[a-zA-Z-0-9]+}?" expression))
+        expression
+      (let ((macro (match-string 0 expression)))
+        (message "{macro=%s}" macro)
+        (setq expression
+              (string-replace macro
+                              (teamake-get-variable-value-litteral macro)
+                              expression))
+        (teamake-expand-macro-expression expression)))))
+
+;; (teamake-expand-macro-expression "${buildDir}")
+
 (defun teamake-project-name ()
   "Return ${project} tag or deduced name from the current scope."
-  (transient-arg-value "${project}=" (transient-args 'teamake)))
+  (teamake-get-variable-value-litteral "${project}"))
 
 (defun teamake-source-dir ()
   "Return current source directory."
-  (transient-arg-value "${sourceDir}=" (transient-args 'teamake)))
+  (teamake-get-variable-value-litteral "${sourceDir}"))
 
 (defun teamake-build-dir ()
-    "Return current build directory."
-    (transient-arg-value "${buildDir}=" (transient-args 'teamake)))
+  "Return current build directory."
+  (teamake-get-variable-value-litteral "${buildDir}"))
 
-(defun teamake--known-macro-map (source-dir)
+(defun teamake--common-macro-map (source-dir)
   "Create a variable expansion map for SOURCE-DIR."
   (list
    (cons "${sourceParentDir}" (file-name-directory (directory-file-name source-dir)))
@@ -89,28 +123,27 @@ different trees."
    (cons "${hostSystemName}" (teamake-host-system-name))
    (cons "${pathListSep}" path-separator)))
 
+
 (defun teamake-replacement-map (source-dir)
   "Create a general replacement map."
-  (let ((known-map (teamake--known-macro-map source-dir)))
-    (if transient-current-prefix
-        (seq-map
-         (lambda (item)
-           (let* ((equal-sign (string-match "=" item))
-                  (token (substring item 0 equal-sign))
-                  (value (substring item (+ equal-sign 1))))
-             (if (s-starts-with? "-V" token)
-                 (let ((prefix "${")
-                       (suffix "}"))
-                   (setq token (substring token 2))
-                   (if (s-starts-with? prefix token)
-                       (setq prefix ""))
-                   (if (s-ends-with? suffix token)
-                       (setq suffix ""))
-                   (setq token (concat prefix token suffix))))
-             (push (token . value) known-map)
-             ))
-         (transient-args 'teamake)))
-    known-map))
+  (let ((known-map (teamake--common-macro-map source-dir)))
+    (seq-map
+     (lambda (item)
+       (let* ((equal-sign (string-match "=" item))
+              (token (substring item 0 equal-sign))
+              (value (substring item (+ equal-sign 1))))
+         (if (s-starts-with? "-V" token)
+             (let ((prefix "${")
+                   (suffix "}"))
+               (setq token (substring token 2))
+               (if (s-starts-with? prefix token)
+                   (setq prefix ""))
+               (if (s-ends-with? suffix token)
+                   (setq suffix ""))
+               (setq token (concat prefix token suffix))))
+         (push (token . value) known-map)))
+     (transient-args 'teamake))
+  known-map))
 
 (defun teamake-expand-known-macros (source-dir &rest input)
   "Expand known macros for configuration of SOURCE-DIR with INPUT as flags."

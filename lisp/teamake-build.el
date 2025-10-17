@@ -23,18 +23,18 @@ target in the build tree."
   "Invoke compilation using the current configuration at BUILD-PATH."
   (interactive)
   (apply #'teamake-process-invoke-cmake
-            (transient-scope)
+            (teamake-build-dir)
             "--build"
-            (transient-scope)
+            (teamake-build-dir)
             (transient-args transient-current-command)))
 
 (defun teamake-build--do-build-preset ()
   "Prompt for build preset and run build from selection."
   (interactive)
   (apply #'teamake-process-invoke-cmake
-         (transient-scope)
+         (teamake-build-dir)
          "--build"
-         (transient-scope)
+         (teamake-build-dir)
          "--preset=dafdsfadsf"))
 
 (transient-define-suffix teamake--invoke-cache ()
@@ -46,7 +46,7 @@ target in the build tree."
   (concat "CMake Build "
           (propertize (teamake-project-name) 'face 'teamake-name)
           " ("
-          (propertize (transient-scope) 'face 'teamake-path)
+          (propertize (teamake-build-dir) 'face 'teamake-path)
           ")\n"))
 
 ;; export function buildArgs(preset: BuildPreset, tempOverrideArgs?: string[], tempOverrideBuildToolArgs?: string[]): string[] {
@@ -86,7 +86,7 @@ target in the build tree."
   [:description
    (lambda () (teamake-build--describe))
    ["Flags"
-    ("-c" "Build target 'clean' first, then build" "--clean-first")
+    ("-c" "Build target 'clean' first, then build actual target" "--clean-first")
     ("-v" "Verbose output" "--verbose")
     ]
    ["Options"
@@ -97,7 +97,7 @@ target in the build tree."
      :reader transient-read-number-N+)
     ("ta" "Build target instead of default targets" "--target="
      :prompt "Targets: "
-     :choices (lambda () (teamake-build--read-build-targets (transient-scope)))
+     :choices (lambda () (teamake-build--read-build-targets (teamake-build-dir)))
      :multi-value repeat)
     ("cf" "For multi configuration tools" "--target="
      :prompt "Configuration: "
@@ -114,9 +114,8 @@ target in the build tree."
   ["Help"
    ("h" "CMake help menu" teamake-cmake-help)
    ]
-  
-  (interactive (list (teamake-build-root default-directory)))
-  (transient-setup 'teamake-build '() '()))
+  (interactive)
+  (transient-setup 'teamake-build))
 
 (provide 'teamake-build)
 ;;; teamake-build.el ends here
