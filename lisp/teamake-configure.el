@@ -23,14 +23,13 @@
 (defun teamake-configure--do-configure ()
   "Execute the currently configured Teamake command."
   (interactive)
-  (let ((command (transient-args 'teamake-configure)))
-    (apply #'teamake-process-invoke-cmake
-           default-directory
-           "-S"
-           source-path
-           (seq-map (lambda (cmd)
-                      (teamake-expand-macro-expression cmd))
-                    command))))
+  (apply #'teamake-process-invoke-cmake
+         (teamake-source-dir)
+         "-S"
+         (teamake-source-dir)
+         (seq-map (lambda (cmd)
+                    (teamake-expand-macro-expression cmd))
+                  (transient-args 'teamake-configure))))
 
 (defun teamake-configure--cache-variables-as-switches (cache-variables-plist)
   "Create statements like <key>=<val> from CACHE-VARIABLES-PLIST."
@@ -46,7 +45,7 @@
     values))
 
 (defun teamake-configure--preset-to-values (preset)
-  "Parse all values from PRESET to CMake flags to use as values."
+  "Parse all values from PRESET to CMake configure flags."
   (let ((values '()))
     (let ((warnings (plist-get preset :warnings))
           (errors (plist-get preset :errors))
@@ -154,11 +153,18 @@
 
 (defun teamake-configure--describe ()
   "Create a description of the current configuration."
-  (concat "CMake Configuration "
-          (propertize (teamake-project-name) 'face 'teamake-name)
-          " ("
-          (propertize (teamake-source-dir) 'face 'teamake-path)
-          ")\n"))
+  (let ((source-dir (teamake-source-dir)))
+    (concat (propertize "CMake Configuration " 'face 'teamake-heading)
+            (propertize (teamake-expand-macro-expression
+                         (teamake-project-name))
+                        'face 'teamake-name)
+            "\n"
+            (propertize (format "${sourceDir}=%s (%s)"
+                                source-dir
+                                (file-truename
+                                 (teamake-expand-macro-expression source-dir)))
+                        'face 'teamake-path)
+            "\n")))
 
 (transient-define-prefix teamake-configure ()
   "Invoke a Teamake configuration step."
@@ -266,7 +272,8 @@
     :prompt "Select profiling output: "
     :reader transient-read-file)
    ("pr" teamake-configure--select-preset
-    :description "Read configuration from preset")
+    :description "Read configuration from preset"
+    :transient t)
    ("gr" "Generate graphviz of dependencies"
     "--graphviz="
     :prompt "Graphviz output: "

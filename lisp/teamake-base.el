@@ -133,7 +133,6 @@ before fetching value."
     (if (not (string-match "${[a-zA-Z-0-9]+}?" expression))
         expression
       (let ((macro (match-string 0 expression)))
-        (message "{macro=%s}" macro)
         (setq expansion
               (string-replace macro
                               (teamake-get-variable-value macro)
