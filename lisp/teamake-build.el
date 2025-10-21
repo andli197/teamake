@@ -45,9 +45,9 @@ target in the build tree."
     ;; (if (plist-member preset :binaryDir)
     ;;     ;; TODO: Set ${buildDir}
     ;;     )
-    (if (plist-member preset :cleanFirst)
+    (if (eq (plist-get preset :cleanFirst) t)
         (add-to-list 'values "--clean-first"))
-    (if (plist-member preset :verbose)
+    (if (eq (plist-get preset :verbose) t)
         (add-to-list 'values "--verbose"))
 
     (if (plist-member preset :jobs)
@@ -79,18 +79,16 @@ target in the build tree."
 
 (defun teamake-build--describe ()
   "Create a description of the current build."
-  (let ((build-dir (teamake-build-dir)))
-    (concat (propertize "CMake Build " 'face 'teamake-heading)
-            (propertize (teamake-expand-macro-expression
-                         (teamake-project-name))
-                        'face 'teamake-name)
-            "\n"
-            (propertize (format "${buildDir}=%s (%s)"
-                                build-dir
-                                (file-truename
-                                 (teamake-expand-macro-expression build-dir)))
-                        'face 'teamake-path)
-            "\n")))
+  (concat (propertize "CMake Build " 'face 'teamake-heading)
+          (propertize (teamake-expand-macro-expression
+                       (teamake-project-name))
+                      'face 'teamake-name)
+          "\n"
+          (propertize (format "${buildDir}=%s (%s)"
+                              (teamake-build-dir)
+                              (teamake-build-dir-absolute))
+                      'face 'teamake-path)
+          "\n"))
 
 (transient-define-prefix teamake-build ()
   "Invoke a build command on an already existing configuration."
@@ -110,7 +108,8 @@ target in the build tree."
      :reader transient-read-number-N+)
     ("ta" "Build target instead of default targets" "--target="
      :prompt "Targets: "
-     :choices (lambda () (teamake-build--read-build-targets (teamake-build-dir)))
+     :choices (lambda () (teamake-build--read-build-targets
+                          (teamake-build-dir-absolute)))
      :multi-value repeat)
     ("cf" "For multi configuration tools" "--target="
      :prompt "Configuration: "
@@ -118,7 +117,11 @@ target in the build tree."
     ("rp" "Restore/resolve package references during build"
      "--resolve-package-references="
      :prompt "Select package restore/resolve: "
-     :choices ("on" "only" "off"))]
+     :choices ("on" "only" "off"))
+    ("nt" "Native tool option" "-- "
+     :class transient-option
+     :prompt "Options: ")
+    ]
    ]
   ["Do"
    ("xx" "Build current tree" teamake-build--do-build)

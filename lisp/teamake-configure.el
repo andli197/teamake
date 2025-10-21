@@ -23,13 +23,15 @@
 (defun teamake-configure--do-configure ()
   "Execute the currently configured Teamake command."
   (interactive)
-  (apply #'teamake-process-invoke-cmake
-         (teamake-source-dir)
-         "-S"
-         (teamake-source-dir)
-         (seq-map (lambda (cmd)
-                    (teamake-expand-macro-expression cmd))
-                  (transient-args 'teamake-configure))))
+  (let ((arguments (seq-map
+                    (lambda (cmd)
+                      (teamake-expand-macro-expression cmd))
+                    (transient-args 'teamake-configure))))
+    (apply #'teamake-process-invoke-cmake
+           (teamake-source-dir)
+           "-S"
+           (teamake-source-dir)
+           arguments)))
 
 (defun teamake-configure--cache-variables-as-switches (cache-variables-plist)
   "Create statements like <key>=<val> from CACHE-VARIABLES-PLIST."
@@ -168,8 +170,7 @@
 
 (transient-define-prefix teamake-configure ()
   "Invoke a Teamake configuration step."
-  :value '("-Wdev" "-Wno-error=dev" "-Wdeprecated" "-Wno-error=deprecated"
-           "-B=${buildDir}" "--install-prefix=${installDir}")
+  :value '("-Wdev" "-Wno-error=dev" "-Wdeprecated" "-Wno-error=deprecated")
   [:description
    (lambda () (teamake-configure--describe))
    ["Warnings"
@@ -245,7 +246,6 @@
    ("b" " Build path" "-B="
     :prompt "Build path: "
     :reader transient-read-directory)
-   ;; -D <var>[:<type>]=<value>    = Create or update a cmake cache entry.
    ("D" " Create or update a cmake cache entry." "-D"
     :class transient-option
     :prompt "List entries as <var>[:<type>]=<value> and comma separate them: "
@@ -272,8 +272,7 @@
     :prompt "Select profiling output: "
     :reader transient-read-file)
    ("pr" teamake-configure--select-preset
-    :description "Read configuration from preset"
-    :transient t)
+    :description "Read configuration from preset")
    ("gr" "Generate graphviz of dependencies"
     "--graphviz="
     :prompt "Graphviz output: "

@@ -149,9 +149,19 @@ before fetching value."
   "Return current source directory."
   (teamake-get-variable-value "${sourceDir}"))
 
+(defun teamake-source-dir-absolute ()
+  "Return current source directory."
+  (file-truename (teamake-expand-macro-expression
+                  (teamake-source-dir))))
+
 (defun teamake-build-dir ()
   "Return current build directory."
   (teamake-get-variable-value "${buildDir}"))
+
+(defun teamake-build-dir-absolute ()
+  "Return fully resolved ${buildDir}."
+  (file-truename (teamake-expand-macro-expression
+                  (teamake-build-dir))))
 
 (defun teamake-directory-name (path)
   "Return the directory name of the PATH."
