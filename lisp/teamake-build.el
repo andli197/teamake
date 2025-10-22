@@ -111,7 +111,7 @@ target in the build tree."
      :choices (lambda () (teamake-build--read-build-targets
                           (teamake-build-dir-absolute)))
      :multi-value repeat)
-    ("cf" "For multi configuration tools" "--target="
+    ("cf" "For multi configuration tools" "--config="
      :prompt "Configuration: "
      :choices ("Release" "Debug" "RelWithDebInfo"))
     ("rp" "Restore/resolve package references during build"
