@@ -43,13 +43,12 @@ target in the build tree."
   "Parse all values from PRESET to CMake build flags."
   (let ((values '()))
     ;; (if (plist-member preset :binaryDir)
-    ;;     ;; TODO: Set ${buildDir}
+    ;;     ;; TODO: Set ${buildDir} from selected configurePreset
     ;;     )
     (if (eq (plist-get preset :cleanFirst) t)
         (add-to-list 'values "--clean-first"))
     (if (eq (plist-get preset :verbose) t)
         (add-to-list 'values "--verbose"))
-
     (if (plist-member preset :jobs)
         (add-to-list 'values (format "--parallel=%i"
                                      (plist-get preset :jobs))))
@@ -61,7 +60,12 @@ target in the build tree."
          (lambda (target)
            (add-to-list 'values (format "--target=%s" target)))
          (teamake-preset--get-property-as-list preset :targets)))
-    ;; TODO handle preset :nativeToolOptions
+    (if (plist-member preset :configuration)
+        (add-to-list 'values (format "--config=%s"
+                                     (plist-get preset :configuration))))
+    (if (plist-member preset :nativeToolOptions)
+        (message "nativeToolOptions not yet supported. '%s' ignored!"
+                 (plist-get preset :nativeToolOptions)))
     values
     )
   )
