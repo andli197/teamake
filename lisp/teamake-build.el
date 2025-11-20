@@ -4,6 +4,7 @@
 (require 'teamake-base)
 (require 'teamake-cache)
 (require 'teamake-process)
+(require 'teamake-preset)
 (require 'teamake-cmake-help)
 
 (defun teamake-build--read-build-targets (build-path)
@@ -12,12 +13,12 @@
 Assuming the generator can provide available targets using the 'help'
 target in the build tree."
   (interactive (list (teamake-build-root default-directory)))
-  (teamake-cmake-shell-command-to-lines
-   build-path
-   "--build"
-   build-path
-   "--target"
-   "help"))
+  (seq-keep
+   (lambda (line)
+     (save-match-data
+       (if (string-match "\\(.+\\):.*" line)
+           (match-string 1 line))))
+   (teamake-cmake-shell-command-to-lines build-path "--build" build-path "--target" "help")))
 
 (defun teamake-build--do-build ()
   "Invoke compilation using the current configuration at BUILD-PATH."
@@ -29,15 +30,6 @@ target in the build tree."
             (seq-map (lambda (cmd)
                        (teamake-expand-macro-expression cmd))
                      (transient-args 'teamake-build))))
-
-(defun teamake-build--do-build-preset ()
-  "Prompt for build preset and run build from selection."
-  (interactive)
-  (apply #'teamake-process-invoke-cmake
-         (teamake-build-dir)
-         "--build"
-         (teamake-build-dir)
-         "--preset=dafdsfadsf"))
 
 (defun teamake-build--preset-to-values (preset)
   "Parse all values from PRESET to CMake build flags."
@@ -129,7 +121,7 @@ target in the build tree."
    ]
   ["Do"
    ("xx" "Build current tree" teamake-build--do-build)
-   ("xp" "Build using preset" teamake-build--do-build-preset)
+   ("xp" "Build using preset" teamake-preset-select-and-execute-build-preset)
    ]
   ["Help"
    ("h" "CMake help menu" teamake-cmake-help)
