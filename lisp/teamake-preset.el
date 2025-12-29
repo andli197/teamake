@@ -5,39 +5,6 @@
 (require 'teamake-base)
 (require 'teamake-process)
 
-;; export function packageArgs(preset: PackagePreset): string[] {
-;;     const result: string[] = [];
-
-;;     // -C semicolon;separated;list;of;configurations;to;pack
-;;     const configurations: string | undefined = preset.configurations?.join(";");
-;;     configurations && result.push(`-C ${configurations}`); // should this be 2 args or 1 with space in between -C and configurations list?
-;;     // -G semicolon;separated;list;of;generators;used
-;;     const generators: string | undefined = preset.generators?.join(";");
-;;     generators && result.push(`-G ${generators}`); // should this be 2 args or 1 with space in between -G and generators list?
-
-;;     // cpack variables: -D var=val
-;;     if (preset.variables) {
-;;         util.objectPairs(preset.variables).forEach(([key, value]) => {
-;;             result.push(`-D ${key}=${value}`);
-;;         });
-;;     }
-
-;;     preset.configFile && result.push('--config', preset.configFile);
-;;     preset.packageName && result.push('-P', preset.packageName);
-;;     preset.packageVersion && result.push('-R', preset.packageVersion);
-;;     preset.packageDirectory && result.push('-B', preset.packageDirectory);
-
-;;     // Output
-;;     if (preset.output) {
-;;         preset.output.verbose && result.push('-V');
-;;         preset.output.debug && result.push('--debug');
-;;     }
-
-;;     return result;
-;; }
-
-;;
-
 ;; Variables
 (defvar teamake-preset--selected-configuration '()
   "Currently selected configuration preset.")
@@ -433,11 +400,6 @@ collection of PRESETS."
             (t t))
       )))
 
-;; (setq root (teamake-preset-parse-presets "/data/tacsi/sandbox/tacsi-code/"))
-;; (setq configurePresets (plist-get (plist-get (car (plist-get root :includes)) :contents) :configurePresets))
-;; (setq windows-config-preset (cadddr configurePresets))
-;; (teamake-preset--is-condition-active (cadr configurePresets))
-
 (defun teamake-preset--invoke-cmake-preset (source-path preset)
   (teamake-process-invoke-cmake
    source-path
@@ -546,6 +508,45 @@ user is interactively prompted to select one."
   (teamake-preset--invoke-cmake-build-preset
    source-path
    teamake-preset--selected-build))
+
+(defun teamake-preset-describe ()
+  (let ((main-heading (propertize "Teamake preset" 'face 'teamake-heading))
+        (scope (format "(%s)" (propertize (transient-scope) 'face 'teamake-path))))
+    (concat main-heading "\n" scope)))
+
+(defun teamake-preset--describe-configuration ()
+  (concat "Configuration preset "
+          (if teamake-preset--selected-configuration
+              (concat "("
+                      (propertize (teamake-preset--get-name-from-preset
+                                   teamake-preset--selected-configuration)
+                                  'face 'transient-value)
+                      ")"))))
+
+(defun teamake-preset--describe-build ()
+  (concat "Build preset "
+          (if teamake-preset--selected-build
+              (concat "("
+                      (propertize (teamake-preset--get-name-from-preset
+                                   teamake-preset--selected-build)
+                                  'face 'transient-value)
+                      ")"))))
+
+(transient-define-prefix teamake-preset (scope)
+  [:description
+   (lambda () (teamake-preset-describe))
+   ("c" teamake-preset-select-configuration-preset
+    :description teamake-preset--describe-configuration
+    :transient t)
+   ("b" teamake-preset-select-build-preset
+    :description teamake-preset--describe-build
+    :transient t)
+   ]
+  (interactive (list (teamake-root)))
+  (transient-setup 'teamake-preset '() '() :scope scope)
+  )
+
+
 
 (provide 'teamake-preset)
 ;;; teamake-preset.el ends here

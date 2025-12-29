@@ -168,7 +168,7 @@
                         'face 'teamake-path)
             "\n")))
 
-(transient-define-prefix teamake-configure ()
+(transient-define-prefix teamake-configure (scope)
   "Invoke a Teamake configuration step."
   :value '("-Wdev" "-Wno-error=dev" "-Wdeprecated" "-Wno-error=deprecated")
   [:description
@@ -287,8 +287,8 @@
    ("xp" "Execute preset" teamake-preset-select-and-execute-configuration-preset)]
   ["Help"
    ("h" "CMake help menu" teamake-cmake-help)]
-  (interactive)
-  (transient-setup 'teamake-configure '() '()))
+  (interactive (list (teamake-root)))
+  (transient-setup 'teamake-configure '() '() :scope scope))
 
 (provide 'teamake-configure)
 ;;; teamake-configure.el ends here

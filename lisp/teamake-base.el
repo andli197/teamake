@@ -43,15 +43,14 @@
   "Face for teamake project path."
   :group 'teamake-faces)
 
-;; Customs
-(defcustom teamake-custom-project-name
-  '()
-  "If set, this will be used as project name for both build trees and code trees.
+(defcustom teamake-project-configurations-file
+  (locate-user-emacs-file "teamake-projects.el")
+  "File in which to save all project configurations."
+  :type 'file
+  :group 'teamake)
 
-Useful for allowing multiple worktrees within the same project to distinguish
-different trees."
-  :group 'teamake-misc
-  :type 'string)
+(defvar teamake--project-configurations '()
+  "List structure containing full configurations of known projects.")
 
 ;; Utilities
 (defun re-seq (regexp string)
@@ -62,6 +61,24 @@ different trees."
         (push (match-string 0 string) matches)
         (setq pos (match-end 0)))
       (reverse matches))))
+
+(defun teamake--read-project-configurations ()
+  "Initialize `teamake--project-configurations' from contents of
+`teamake-project-configurations-file'"
+  (setq teamake--project-configurations
+        (when (file-exists-p teamake-project-configurations-file)
+          (with-temp-buffer
+            (insert-file-contents teamake-project-configurations-file)
+            (read (current-buffer))))))
+
+(defun teamake--write-project-configurations ()
+  "Save `teamake--project-configurations' in `teamake-project-configurations-file'"
+  (with-temp-buffer
+    (insert ";;; -*- lisp-data -*-\n")
+    (let ((print-length '())
+          (print-level '()))
+      (pp teamake--project-configurations (current-buffer)))
+    (write-region '() '() teamake-project-configurations-file '() 'silent)))
 
 (defun teamake--string-from-key (key)
   "Remove the leading :-sign from the KEY."
@@ -141,6 +158,24 @@ before fetching value."
             (error "No known definition for '%s' found!" macro))
         (teamake-expand-macro-expression expansion)))))
 
+(defun teamake-root ()
+  "Fetch root directory.
+
+Start from base directory deduced from scope (if invoked from transient)
+or default-directory and either:
+1. Locate topmost CMakeLists.txt file or
+2. Locate topmost CMakeCache.txt file or
+3. Locate .git directory or
+4. Return base directory."
+  (let ((dir (teamake-get-scope-or-default)))
+    (or (teamake--find-root dir "CMakeLists.txt")
+        (teamake--find-root dir "CMakeCache.txt")
+        (teamake--find-root dir ".git")
+        dir)))
+
+(defun teamake-get-scope-or-default ()
+  (or (transient-scope) default-directory))
+
 (defun teamake-project-name ()
   "Return ${project} tag or deduced name from the current scope."
   (teamake-get-variable-value "${project}"))
@@ -176,27 +211,6 @@ before fetching value."
         ((string= system-type "darwin") "Darwin")
         (t system-type)))
 
-(defun teamake-apply-replacement-map (map input)
-  "Apply each replacement from MAP in INPUT and return the result.
-
-MAP should be a association list with each item is (REGEXP . REPLACEMENT)."
-  (let ((result input))
-    (seq-do
-     (lambda (exp)
-       (setq result (replace-regexp-in-string (car exp) (cdr exp) result)))
-     map)
-    result))
-
-(defun teamake-return-value-or-default (variable default-value)
-  "Return the value of VARIABLE if it is non empty, otherwise DEFAULT-VALUE."
-  (if (teamake-variable-not-set variable)
-      default-value
-    variable))
-
-(defun teamake-variable-not-set (variable)
-  "Determine if the VARIABLE is set or not."
-  (or (eq variable '()) (string= variable "")))
-
 (defun teamake--find-root (path filename)
   "Look for the dominating FILENAME in PATH.
 
@@ -214,12 +228,12 @@ then look for FILENAME files in parent directories."
                             filename)))
     (if topmost-directory
         (directory-file-name topmost-directory)
-      "")))
+      '())))
 
-(defun teamake-build-root (&optional build-path)
+(defun teamake-build-root (&optional path)
   "Find the dominating topmost CMakeCache.txt file in BUILD-PATH."
   (interactive (list (read-directory-name "Select path within build tree: " default-directory '() t)))
-  (teamake--find-root build-path "CMakeCache.txt"))
+  (teamake--find-root path "CMakeCache.txt"))
 
 (defun teamake-build-tree-p (path)
   "Determine if PATH is part of a build tree."
@@ -235,7 +249,9 @@ then look for FILENAME files in parent directories."
 
 (defun teamake-code-root (&optional source-path)
   "Find the dominating topmost CMakeLists.txt file in SOURCE-PATH."
-  (interactive (list (read-directory-name "Select path within code tree: " default-directory '() t)))
+  (interactive
+   (list
+    (read-directory-name "Select path within code tree: " default-directory '() t)))
   (teamake--find-root source-path "CMakeLists.txt"))
 
 (defun teamake-code-tree-p (path)
@@ -270,12 +286,13 @@ If PATH needs to be code-tree or build-tree set PREDICATE to either
            (teamake--find-root path "CMakeCache.txt"))
           (t (or default-value "<No project path>")))))
 
-(defun teamake-tree-p (path predicate)
+(defun teamake-tree-p (path &optional predicate)
   "Return if PATH is a recognized tree.
 
 PREDICATE is testing for type of tree."
 
-  (let* ((prediction (funcall predicate path)))
+  (let* ((predicate (or predicate (lambda (path) t)))
+         (prediction (funcall predicate path)))
     (cond ((and (teamake-code-tree-p path) prediction)
            (teamake-code-tree-p path))
           ((and (teamake-build-tree-p path) prediction)
@@ -293,10 +310,10 @@ PREDICATE is testing for type of tree."
             (car (split-string (match-string 1 content) " " t))
           "<No project>"))))
 
-(defun teamake--name-from-build-tree (build-path)
+(defun teamake--name-from-build-tree (path)
   "Return project name of the project within BUILD-PATH."
-  (if (teamake-build-tree-p build-path)
-      (let* ((cache-file (file-name-concat (teamake-build-root build-path) "CMakeCache.txt"))
+  (if (teamake-build-tree-p path)
+      (let* ((cache-file (file-name-concat (teamake-build-root path) "CMakeCache.txt"))
              (content (with-temp-buffer
                         (insert-file-contents cache-file)
                         (buffer-string))))
@@ -316,13 +333,58 @@ PREDICATE can be one of `teamake-code-tree-p' or `teamake-build-tree-p'"
                               (propertize (teamake-get-root path predicate)
                                           'face 'teamake-path))))))
 
-(defun teamake--code-tree-heading (text path)
-  "Create a heading for use in transient with TEXT for PATH."
-  (teamake-heading text path 'teamake-code-tree-p))
+(defun teamake--format-as-variable-expression (variable)
+  "Make VARIABLE as a valid variable expression"
+  (let ((prefix "${")
+        (suffix "}"))
+    (if (s-starts-with? prefix variable) (setq prefix ""))
+    (if (s-ends-with? suffix variable) (setq suffix ""))
+    (format "%s%s%s" prefix variable suffix)))
 
-(defun teamake--build-tree-heading (text path)
-  "Create a heading for use in transient with TEXT for PATH."
-  (teamake-heading text path 'teamake-build-tree-p))
+(defun teamake--get-project-configuration-variable-expression (scope variable)
+  "Return VARIABLE from project-configuration using SCOPE."
+  (seq-find (lambda (val)
+              (s-starts-with? (teamake--format-as-variable-expression variable) val))
+            (teamake-get-project-configuration-data scope 'teamake)))
+
+;; (setq teamake--project-configurations
+;;       (list "scope" (list 'prefix '("${project}=\"Test project\""))))
+;; (teamake--write-project-configurations)
+;; (teamake--get-project-configuration-variable-expression "ased" "foobar")
+
+(defun teamake--get-value-from-expression (expression)
+  "Return the value of EXPRESSION.
+
+EXPRESSION should be formatted as property=value, $property=value, ${property}=value."
+  (let ((idx (string-match "=" expression)))
+    (if idx (setq idx (+ idx 1)))
+    (substring expression idx)))
+
+(defun teamake--get-project-configurations-data (scope prefix)
+  (teamake--read-project-configurations)
+  (let ((existing (plist-get teamake--project-configurations scope 'string=)))
+    (plist-get existing prefix)))
+
+(defun teamake--set-project-configurations-data (scope prefix values)
+  "Update the PREFIX data at SCOPE with VALUES."
+  (if (not (plist-member teamake--project-configurations scope 'string=))
+      (plist-put teamake--project-configurations scope (list prefix values))
+    (let ((existing (plist-get teamake--project-configurations scope 'string=)))
+      (plist-put existing prefix prefix values))))
+
+(defun teamake-invoke-as-subprefix (scope prefix)
+  "Save project configuration and invoke PREFIX at SCOPE."
+  (teamake--write-project-configurations)
+  (teamake-setup-from-scope scope prefix))
+
+(defun teamake-setup-from-scope (scope prefix)
+  "Read the project configurations file and initialize PREFIX at SCOPE."
+  (transient-setup
+   prefix '() '()
+   :scope scope
+   :value (teamake--get-project-configurations-data scope prefix)))
+
+
 
 (provide 'teamake-base)
 ;;; teamake-base.el ends here
