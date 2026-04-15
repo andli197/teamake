@@ -209,18 +209,6 @@ and return a flat list with matched objects."
          (plist-get info :includes)))
     property-values))
 
-(defun teamake-preset--expand-expression (expression source-dir)
-  "Expand specific preset expressions.
-
-EXPRESSION is the full expression and SOURCE-DIR is where the code is located."
-  (cond ((string= text "${dollar}")
-         "$")
-        ((string= text "${pathListSep}")
-         path-separator)
-        (t (teamake-expand-regular expression source-dir))))
-
-
-
 (defun teamake-preset--get-configure-presets (info)
   "Return a list of all configure presets starting at INFO."
   (teamake-preset--get-all info :configurePresets))
@@ -246,7 +234,9 @@ EXPRESSION is the full expression and SOURCE-DIR is where the code is located."
   (let ((source-dir (plist-get (plist-get preset :fusedConfiguration) :source-dir)))
     (cond ((string= text "${presetName}") (plist-get preset :name))
           ((string= text "${generator}") (plist-get preset :generator))
-          (t (teamake-expand-macro source-dir)))))
+          ((string= text "${dollar}") "$")
+          ((string= text "${pathListSep}") path-separator)
+          (t (teamake-expand-regular source-dir)))))
 
 (defun teamake-preset--condition-equals (lhs rhs preset)
   "Expand LHS and RHS macro from PRESET and evaluate equality."
@@ -451,9 +441,6 @@ the selection."
          (selected-preset-name (completing-read (format "%s: " preset-type) names '() t)))
     (teamake-preset--get-preset-from-name preset-name presets)))
 
-
-
-
 (defun teamake-preset-select-configuration-preset-from-path (source-path)
   "Read all configuration presets from SOURCE-PATH and preset to user."
   ;; save presets in project???????? Needs some thinking, due to cache invalidation
@@ -466,7 +453,8 @@ the selection."
          (preset-name
           (completing-read "Configuration preset: "
                            names '() t)))
-    (teamake-preset--get-preset-from-name preset-name presets)))
+    (teamake-preset--fuse (teamake-preset--get-preset-from-name preset-name presets)
+                          presets)))
 
 (defun teamake-preset-select-build-preset (project)
   "Select a CMake build preset from PROJECT."

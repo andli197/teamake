@@ -50,8 +50,21 @@
            (list "-S" source-dir
                  (format "--preset=%s" (plist-get preset :name))))))
 
+(defun teamake-configure--cache-variables-as-switches (cache-variables-plist)
+  "Create statements like <key>=<val> from CACHE-VARIABLES-PLIST."
+  (let* ((values '())
+         (counter 0)
+         (key (nth counter cache-variables-plist))
+         (value (plist-get cache-variables-plist key)))
+    (while key
+      (add-to-list 'values (format "%s=%s" (substring (format "%s" key) 1) value))
+      (setq counter (+ counter 2)
+            key (nth counter cache-variables-plist)
+            value (plist-get cache-variables-plist key)))
+    values))
+
 (defun teamake-configure--preset-to-values (preset)
-  "Parse all values from current configuration preset to current 'teamake-configure in PROJECT."
+  "Parse all values from PRESET into values for `teamake-configure'."
   (let ((values '()))
     (let ((warnings (plist-get preset :warnings))
           (errors (plist-get preset :errors))
@@ -305,7 +318,6 @@
    ["Configure"
     ("xx" "Execute current" teamake-configure--do-configure)
     ("xp" "Execute preset" teamake-configure--select-and-execute-preset)
-    ;; ("xb" "Open build settings" teamake-configure--cmake-build)
     ;; ("cs" "Save current configuration" teamake-configure--save-configuration)
     ;; ("cl" "Load stored configuration" teamake-configure--load-configuration)
     ("xb" teamake-configure--build-menu)
