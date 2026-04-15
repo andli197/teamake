@@ -1,0 +1,133 @@
+{
+  "version": 4,
+  "cmakeMinimumRequired": {
+    "major": 1,
+    "minor": 2,
+    "patch": 3
+  },
+  "configurePresets": [
+    {
+      "name": "Config-Base",
+      "hidden": true,
+      "generator": "Ninja",
+      "binaryDir": "${sourceDir}/../build/${generator}/${name}",
+      "installDir": "${sourceDir}/../install/${generator}/${name}"
+    },
+    {
+      "name": "MSVC",
+      "inherits": "Config-Base",
+      "toolchailFile": "${sourceDir}/toolchain/msvc.cmake",
+      "condition": {
+        "type": "equals",
+        "lhs": "${hostSystemName}",
+        "rhs": "Windows"
+      }
+    },
+    {
+      "name": "GCC",
+      "inherits": "Config-Base",
+      "toolchailFile": "${sourceDir}/toolchain/gcc.cmake",
+      "condition": {
+        "type": "equals",
+        "lhs": "${hostSystemName}",
+        "rhs": "Linux"
+      }
+    }
+  ],
+  "buildPresets": [
+    {
+      "name": "Base",
+      "hidden": true
+    },
+    {
+      "name": "Base-Debug",
+      "inherits": "Base",
+      "configuration": "Debug",
+      "hidden": true
+    },
+    {
+      "name": "Base-Release",
+      "inherits": "Base",
+      "configuration": "Release",
+      "hidden": true
+    },
+    {
+      "name": "Debug-GCC",
+      "displayName": "Build Debug",
+      "inherits": "Base-Debug",
+      "configurePreset": "GCC"
+    },
+    {
+      "name": "Install-Debug-GCC",
+      "displayName": "Install Debug",
+      "inherits": "Debug-GCC",
+      "targets": [
+        "all",
+        "install"
+      ]
+    },
+    {
+      "name": "Release-GCC",
+      "displayName": "Build Release",
+      "inherits": "Base-Release",
+      "configurePreset": "GCC"
+    },
+    {
+      "name": "Install-Release-GCC",
+      "displayName": "Install Release",
+      "inherits": "Release-GCC",
+      "targets": [
+        "all",
+        "install"
+      ]
+    },
+    {
+      "name": "Debug-MSVC",
+      "displayName": "Build Debug",
+      "inherits": "Base-Debug",
+      "configurePreset": "MSVC"
+    },
+    {
+      "name": "Install-Debug-MSVC",
+      "displayName": "Install Debug",
+      "inherits": "Debug-MSVC",
+      "targets": [
+        "all",
+        "install"
+      ]
+    },
+    {
+      "name": "Release-MSVC",
+      "displayName": "Build Release",
+      "inherits": "Base-Release",
+      "configurePreset": "MSVC"
+    },
+    {
+      "name": "Install-Release-MSVC",
+      "displayName": "Install Release",
+      "inherits": "Release-MSVC",
+      "targets": [
+        "all",
+        "install"
+      ]
+    }
+  ],
+  "testPresets": [
+    {
+      "name": "Base",
+      "hidden": true,
+      "output": {
+        "outputOnFailure": true
+      }
+    },
+    {
+      "name": "Test-MSVC-Debug",
+      "inherits": "Base",
+      "configurePreset": "MSVC"
+    },
+    {
+      "name": "Test-MSVC-Release",
+      "configurePreset": "MSVC"
+    }
+  ]
+}
