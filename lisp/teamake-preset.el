@@ -229,14 +229,14 @@ and return a flat list with matched objects."
   "Evaluate :hidden property in PRESET.  Return the opposite."
   (not (plist-get preset :hidden)))
 
-(defun teamake-preset--expand-macro (text preset)
+(defun teamake-preset--expand-macro (text preset &optional source-dir)
   "Expand TEXT with macro replacement from PRESET."
-  (let ((source-dir (plist-get (plist-get preset :fusedConfiguration) :source-dir)))
+  (let ((source-dir (or source-dir (teamake--find-root (plist-get preset :file) "CMakeLists.txt"))))
     (cond ((string= text "${presetName}") (plist-get preset :name))
           ((string= text "${generator}") (plist-get preset :generator))
           ((string= text "${dollar}") "$")
           ((string= text "${pathListSep}") path-separator)
-          (t (teamake-expand-regular source-dir)))))
+          (t (teamake-expand-regular text source-dir)))))
 
 (defun teamake-preset--condition-equals (lhs rhs preset)
   "Expand LHS and RHS macro from PRESET and evaluate equality."
@@ -332,7 +332,7 @@ collection of PRESETS."
                         (teamake-preset--is-condition-active-recursively inherited-preset presets)))
              ))
          (teamake-preset--get-inheritance-list preset))
-        )
+      )
     is-active
     )
   )
@@ -439,7 +439,7 @@ the selection."
          (names (seq-map (lambda (p) (teamake-preset--display-name-from-preset p))
                          user-selectable-presets))
          (selected-preset-name (completing-read (format "%s: " preset-type) names '() t)))
-    (teamake-preset--get-preset-from-name preset-name presets)))
+    (teamake-preset--get-preset-from-name selected-preset-name presets)))
 
 (defun teamake-preset-select-configuration-preset-from-path (source-path)
   "Read all configuration presets from SOURCE-PATH and preset to user."

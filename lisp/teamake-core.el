@@ -129,7 +129,7 @@ then look for FILENAME files in parent directories."
 
 (defun teamake-source-parent-dir (path)
   "Return the source parent dir from PATH."
-  (file-name-directory (directory-file-name path)))
+  (directory-file-name (file-name-directory (directory-file-name path))))
 
 (defun teamake-host-system-name ()
   "Return host system name as simple string as CMake usually use."

@@ -189,9 +189,19 @@
   :description "Read from preset"
   (interactive)
   (let* ((project (transient-scope))
-         (preset (teamake-preset-select-configuration-preset project)))
-    (teamake-set-current-values 'teamake-configure project
-                                (teamake-configure--preset-to-values preset))
+         (preset (teamake-preset-select-configuration-preset project))
+         (values (teamake-configure--preset-to-values preset)))
+
+    (teamake-set-current-values
+     'teamake-configure project
+     (seq-map
+      (lambda (value)
+        (teamake-expand-expression
+         value
+         (plist-get project :source-dir)
+         (lambda (text source-dir)
+           (teamake-preset--expand-macro text preset source-dir))))
+      values))
     (teamake-setup-transient 'teamake-configure project)))
 
 ;;;###autoload
