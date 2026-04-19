@@ -18,7 +18,7 @@
 (teamake-load-project-configurations)
 
 ;;;###autoload
-(add-hook 'kill-emacs-hook 'teamake-project--write-project-configurations)
+(add-hook 'kill-emacs-hook 'teamake-save-project-configurations)
 
 (defalias 'teamake 'teamake-project)
 

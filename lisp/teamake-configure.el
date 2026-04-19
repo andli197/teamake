@@ -44,11 +44,39 @@
   (interactive)
   (let* ((project (transient-scope))
          (source-dir (plist-get project :source-dir))
-         (preset (teamake-preset-select-configuration-preset source-dir)))
+         (preset (teamake-preset-select-configuration source-dir)))
     (apply #'teamake-process-invoke-cmake
            project
-           (list "-S" source-dir
-                 (format "--preset=%s" (plist-get preset :name))))))
+           "-S"
+           source-dir
+           (format "--preset=%s" (plist-get preset :name)))))
+
+
+(transient-define-suffix teamake-configure--save-current ()
+  "Save the current configure as current for later use."
+  (interactive)
+  (let ((project (transient-scope))
+        (values (transient-args 'teamake-configure)))
+    (teamake-set-current-values 'teamake-configure project values)
+    (teamake-project--save-project)))
+
+(transient-define-suffix teamake-configure--save-current-as ()
+  "Save the current configure as current for later use."
+  (interactive)
+  (let* ((project (transient-scope))
+         (existing-names (teamake-get-save-names 'teamake-configure project))
+         (name (completing-read "Configuration name (match will overwrite): " existing-names)))
+    (teamake-set-save-values 'teamake-configure project name (transient-args 'teamake-configure))))
+
+(transient-define-suffix teamake-configure--load-configuration ()
+  "Load a previously saved configuration."
+  (interactive)
+  (let* ((project (transient-scope))
+         (existing-names (teamake-get-save-names 'teamake-configure project))
+         (name-to-load (completing-read "Configuration: " existing-names '() t))
+         (values (teamake-get-save-value 'teamake-configure project name-to-load)))
+    (teamake-set-current-values 'teamake-configure project values)
+    (teamake-setup-transient 'teamake-configure project)))
 
 (defun teamake-configure--cache-variables-as-switches (cache-variables-plist)
   "Create statements like <key>=<val> from CACHE-VARIABLES-PLIST."
@@ -167,45 +195,39 @@
   :description "Visit build tree"
   (interactive)
   (let ((project (transient-scope))
-        (values (transient-get-value))
-        (build-tree "")
-        (build-values-from-configure '()))
-    (seq-do
-     (lambda (option)
-       (save-match-data
-         (if (string-match "-B=\\(.+\\)" option)
-             (progn
-               (add-to-list 'build-values-from-configure option)
-               (setq build-tree (match-string 1 option))))
-         (add-to-list 'build-values-from-configure (format "-S=%s" (plist-get project :source-dir)))))
-     values)
-        
+        (values (transient-args 'teamake-configure)))
     (transient-setup 'teamake-build '() '()
-                     :scope build-tree
-                     :value build-values-from-configure)
+                     :scope (transient-arg-value "-B=" values)
+                     :value (list (format "-S=%s" (plist-get (transient-scope) :source-dir))))
   ))
 
 (transient-define-suffix teamake-configure--select-preset ()
   :description "Read from preset"
   (interactive)
   (let* ((project (transient-scope))
-         (preset (teamake-preset-select-configuration-preset project))
+         (preset (teamake-preset-select-from-project project :configurePresets))
+         ;; (preset (teamake-preset-select-configuration project))
          (values (teamake-configure--preset-to-values preset)))
+    (message "project=%s" project)
+    (message "preset=%s" preset)
+    (message "values=%s" values)
 
-    (teamake-set-current-values
-     'teamake-configure project
-     (seq-map
-      (lambda (value)
-        (teamake-expand-expression
-         value
-         (plist-get project :source-dir)
-         (lambda (text source-dir)
-           (teamake-preset--expand-macro text preset source-dir))))
-      values))
+
+    (setq tmp (seq-map (lambda (value)
+                (teamake-expand-expression
+                 value
+                 (plist-get project :source-dir)
+                 (lambda (text source-dir)
+                   (teamake-preset--expand-macro text preset source-dir))))
+                       values))
+    (message "tmp=%s" tmp)
+    (teamake-set-current-values 'teamake-configure project values)
+    
     (teamake-setup-transient 'teamake-configure project)))
 
 ;;;###autoload
 (transient-define-prefix teamake-configure (project)
+  :value '("--install=bleh")
   [:description
    (lambda () (format "%s %s\n"
                       (propertize "CMake Configure" 'face 'teamake-heading)
@@ -237,8 +259,8 @@
      "--graphviz="
      :prompt "Graphviz output: "
      :reader transient-read-file)]
-   
-   ["Warnings"
+   ]
+  [["Warnings"
     ("-ww" "Enable developer warnings"
      "-Wdev")
     ("-wW" "Suppress developer warnings"
@@ -254,10 +276,7 @@
     ("-wm" "Make deprecated macro and function warnings errors"
      "-Werror=deprecated")
     ("-wM" "Make deprecated macro and function warnings not errors"
-     "-Wno-error=deprecated")
-    ]
-   ]
-   [
+     "-Wno-error=deprecated")]
     ["Debug"
      ("-cli" "Don't warn about command line options"
       "--no-warn-unused-cli")
@@ -282,61 +301,60 @@
      ("dsi" " Dump information about this system"
       "--system-information="
       :prompt "Select system dump file: "
-      :reader transient-read-file)
-     ]
-    ["Trace"
-     ("trace-mode" "Put cmake in trace mode" "--trace")
-     ("trace-expand" "Put cmake in trace mode with variable expansion"
-      "--trace-expand")
-     ("trace-format" " Set the output format of the trace"
-      "--trace-format="
-      :prompt "Format: "
-      :choices ("human" "json-v1"))
-     ("trace-source" "Trace only this CMake file/module"
-      "--trace-source="
-      :prompt "CMake file/module: "
-      :multi-value repeat
-      :reader transient-read-file)
-     ("trace-redirect" " Redirect trace output to a file instead of stderr"
-      "--trace-redirect="
-      :prompt "Trace output: "
-      :reader transient-read-file)
-     ]
-    ]
-   [
-    ["Misc"
-     ("-f" "Configure a fresh build tree, removing any existing cache file"
-      "--fresh")
-     ("-n" "View mode only" "-N")
-     ("-u" "Warn about uninitialized values"
-      "--warn-uninitialized")
-     ("l" " Set the verbosity of message from CMake files."
-      "--log-level="
-      :prompt "Select log level: "
-      :choices ("ERROR" "WARNING" "NOTICE" "STATUS" "VERBOSE" "DEBUG" "TRACE"))
-     ]
-    ["Profiling"
-     ("po" "Output format for profiling CMake scripts"
-      "--profiling-format="
-      :prompt "Select format: "
-      :choices ("google-trace"))
-     ("pf" "Select an output path for the profiling data"
-      "--profiling-output="
-      :prompt "Select profiling output: "
       :reader transient-read-file)]
     ]
-   ["Configure"
-    ("xx" "Execute current" teamake-configure--do-configure)
-    ("xp" "Execute preset" teamake-configure--select-and-execute-preset)
-    ;; ("cs" "Save current configuration" teamake-configure--save-configuration)
-    ;; ("cl" "Load stored configuration" teamake-configure--load-configuration)
-    ("xb" teamake-configure--build-menu)
+  [["Trace"
+    ("-trm" "Put cmake in trace mode" "--trace")
+    ("-tre" "Put cmake in trace mode with variable expansion"
+     "--trace-expand")
+    ("trf-format" " Set the output format of the trace"
+     "--trace-format="
+     :prompt "Format: "
+     :choices ("human" "json-v1"))
+    ("trs" "Trace only this CMake file/module"
+     "--trace-source="
+     :prompt "CMake file/module: "
+     :multi-value repeat
+     :reader transient-read-file)
+    ("trr" " Redirect trace output to a file instead of stderr"
+     "--trace-redirect="
+     :prompt "Trace output: "
+     :reader transient-read-file)]
+   ["Misc"
+    ("-f" "Configure a fresh build tree, removing any existing cache file"
+     "--fresh")
+    ("-n" "View mode only" "-N")
+    ("-u" "Warn about uninitialized values"
+     "--warn-uninitialized")
+    ("l" " Set the verbosity of message from CMake files."
+     "--log-level="
+     :prompt "Select log level: "
+     :choices ("ERROR" "WARNING" "NOTICE" "STATUS" "VERBOSE" "DEBUG" "TRACE"))]
+   ]
+  ["Profiling"
+   ("pf" "Output format for profiling CMake scripts"
+    "--profiling-format="
+    :prompt "Select format: "
+    :choices ("google-trace"))
+   ("po" "Select an output path for the profiling data"
+    "--profiling-output="
+    :prompt "Select profiling output: "
+    :reader transient-read-file)]
+   [["Do"
+    ("xx" "Execute current" teamake-configure--do-configure :transient t)
+    ("xp" "Execute preset" teamake-configure--select-and-execute-preset :transient t)
+    ("xb" teamake-configure--build-menu :transient t)]
+    ["Manage"
+     ("xsc" "Save current" teamake-configure--save-current :transient t)
+     ("xsa" "Save as" teamake-configure--save-current-as :transient t)
+     ("xl" "Load configuration" teamake-configure--load-configuration)]
     ]
    (interactive
-    (let ((project-root (teamake--find-root default-directory "CMakeLists.txt")))
-      (list (teamake-project-get-project-from-path project-root))))
-   (teamake-setup-transient 'teamake-configure project)
-   )
+    (let ((project-root (teamake--find-root default-directory "CMakeLists.txt"))
+          (no-project (list :name "No CMake project" :source-dir default-directory)))
+      (list (if project-root (teamake--project-from-path project-root)
+              no-project))))
+   (teamake-setup-transient 'teamake-configure project))
 
 
 (provide 'teamake-configure)

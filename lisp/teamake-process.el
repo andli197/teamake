@@ -13,12 +13,12 @@
                                (file-name-nondirectory program)
                                process-buf
                                program
-                               args)))
+                                args)))
     (set-process-buffer process process-buf)
     (with-current-buffer process-buf
       (goto-char (point-max))
       (set-marker (process-mark process) (point)))
-    (pop-to-buffer process-buf)
+    ;; (pop-to-buffer process-buf)
     process))
 
 (defun teamake-process--get-cmake-tool (&optional tool)

@@ -37,6 +37,13 @@ If the property does not exist, return empty list."
   "Return property :inherits from PRESET as a list."
   (teamake-preset--get-property-as-list preset :inherits))
 
+(defun teamake-preset--is-category (preset category)
+  "Determine if PRESET is of CATEGORY.
+
+The CMakePresets is naming categories to configurePresets but it is
+benificial to have it in singular instead.  Hence need to convert to string "
+  )
+
 (defun teamake-preset--parse-file (filename &optional include)
   "Parse each preset from FILENAME and the optional INCLUDE file.
 
@@ -66,16 +73,11 @@ CMakePresets.json is not necessary explicitly included."
 
           (seq-do
            (lambda (inheritance)
-             (unless (seq-find
-                      (lambda (p)
-                        (and (string= (plist-get p :name) inheritance)
-                             (eq (plist-get p :category) category)))
-                      reachable-presets)
+             (unless (seq-find (lambda (p) (and (string= (plist-get p :name) inheritance)
+                                                (eq (plist-get p :category) category)))
+                               reachable-presets)
                (error "Unable to resolve inheritance '%s' from '%s' (category '%s') in file '%s'"
-                      inheritance
-                      (plist-get preset :name)
-                      category
-                      filename)))
+                      inheritance (plist-get preset :name) category filename)))
            (teamake-preset--get-inheritance-list preset))
             
           )
@@ -187,6 +189,13 @@ If no description exists, return empty string."
          ))
    presets))
 
+(defun teamake-preset--get-preset-matching (presets match-fn)
+  "Find the first preset among PRESETS matching the result of applying MATCH-FN."
+  (seq-find
+   (lambda (p)
+     (funcall match-fn p))
+   presets))
+
 (defun teamake-preset--get-all (info property)
   "Fetch all properties of type PROPERTY starting with INFO.
 
@@ -267,10 +276,14 @@ and return a flat list with matched objects."
   (not (teamake-preset--condition-matches string regex preset)))
 
 (defun teamake-preset--is-condition-active (preset)
-  "Evaluate :condition property and return if PRESET should be enabled."
+  "Evaluate :condition property and return if PRESET should be enabled.
+
+NOTE: Only the first condition will be evaluated!"
   (if (not (plist-member preset :condition))
       t
     (let ((condition (plist-get preset :condition)))
+      ;; Since we represent a preset as a property list we only
+      ;; can parse one condition on each preset for now.
       (cond ((stringp condition)
              ;; type, value => static value, everything but
              ;; litteral string 'false' is considered true
@@ -309,6 +322,7 @@ and return a flat list with matched objects."
                        preset))
                      (t t))
                ))
+            ((eq condition :json-false) '())
             (t t))
       )))
 
@@ -339,13 +353,13 @@ collection of PRESETS."
 
 
 
-(defun teamake-preset--get-user-selectable-presets (presets preset-type &optional configure-preset)
-  "Filter out user selectable preset of type PRESET-TYPE from PRESETS.
+(defun teamake-preset--get-user-selectable-presets (presets category &optional configure-preset)
+  "Filter out user selectable preset of type CATEGORY from PRESETS.
 
 If optional value CONFIGURE-PRESET is given the preset must match that preset. Usable for other than configuration presets."
   (seq-filter
    (lambda (preset)
-     (and (eq (plist-get preset :category) preset-type)
+     (and (eq (plist-get preset :category) category)
           (if (not configure-preset)
               t
             (string= (plist-get preset :configurePreset) configure-preset))
@@ -353,11 +367,127 @@ If optional value CONFIGURE-PRESET is given the preset must match that preset. U
           (teamake-preset--is-condition-active-recursively preset presets)))
    presets))
 
+(defun teamake-preset--is-condition-active-all-the-way (preset presets)
+  "Determine if PRESET is active through its inheritance.
+
+PRESETS is representing all presets and CATEGORY is the preset category to select from."
+  (let* ((category (plist-get preset :category))
+         (current preset)
+         (category-presets (seq-filter (lambda (p) (eq (plist-get p :category) category)) presets))
+         (inheritance (teamake-preset--get-inheritance-list current))
+         (visited '())
+         (is-condition-active (teamake-preset--is-condition-active current)))
+    (while (and is-condition-active inheritance)
+      (setq current (teamake-preset--get-preset-from-name (car inheritance) category-presets)
+            inheritance (cdr inheritance))
+      (unless (seq-find (lambda (name) (string= (plist-get current :name) name)) visited)
+        (add-to-list 'visited (plist-get current :name))
+        (setq is-condition-active
+              (and is-condition-active (teamake-preset--is-condition-active current)))
+        (seq-do
+         (lambda (inheritance-name)
+           (add-to-list 'inheritance inheritance-name))
+         (teamake-preset--get-inheritance-list current))))
+    is-condition-active
+    ))
+
+(defun teamake-preset--is-match-recursive (preset presets match-fn)
+  ;; match-fn should take a preset and current value as input and produce next value
+  (let* ((category (plist-get preset :category))
+         (current preset)
+         (category-presets (seq-filter (lambda (p) (eq (plist-get p :category) category)) presets))
+         (inheritance (teamake-preset--get-inheritance-list current))
+         (visited '())
+         (result (funcall match-fn current t)))
+    (while (and result inheritance)
+      (setq current (teamake-preset--get-preset-matching
+                     category-presets
+                     (lambda (p) (string= (plist-get p :name) (car inheritance))))
+            inheritance (cdr inheritance))
+      (unless (seq-find (lambda (name) (string= (plist-get current :name) name)) visited)
+        (add-to-list 'visited (plist-get current :name))
+
+        (setq result (funcall match-fn current result))
+        
+        (seq-do
+         (lambda (inheritance-name)
+           (add-to-list 'inheritance inheritance-name))
+         (teamake-preset--get-inheritance-list current))))
+    result
+    ))
+
+(defun teamake-preset--selectable-presets (presets category &optional configure-preset)
+  "Return all PRESETS matching CATEGORY and is available for selection.
+
+Selection availability is determined from if the preset is visible and if
+the condition thoughout the inheritance is true.  If the optional parameter
+CONFIGURE-PRESET is provided (and the category is not :configurePresets) the
+preset must match it to be selectable."
+  (seq-filter
+   (lambda (preset)
+     (and (eq (plist-get preset :category) category)
+          (teamake-preset--is-visible preset)
+          ;; Check if current preset´s inheritance is matching configure-preset and
+          ;; if it has an conditional that evaluates to true
+          ;;   => preset is selectable
+          (teamake-preset--is-match-recursive
+           preset presets
+           (lambda (inner value)
+             (and value (teamake-preset--is-condition-active inner)
+                  (if (and configure-preset (plist-member inner :configurePreset))
+                      (string= (plist-get inner :configurePreset) configure-preset)
+                    t))))))
+   presets))
+
+(defun teamake-preset--prompt-selection (selectable category)
+  (let* ((names (seq-map (lambda (p) (teamake-preset--display-name-from-preset p)) selectable))
+         (selected-name (completing-read (format "Select %s:" (substring (format "%s" category) 1)) names '() t)))
+    (seq-find 
+     (lambda (p)
+       (string= (teamake-preset--display-name-from-preset p) selected-name))
+     selectable)))
+
+(transient-define-suffix teamake-preset-select-from-project (project category)
+  "Select preset in PROJECT for the given CATEGORY and use as current."
+  (interactive)
+  (let ((preset (teamake-preset-select-from-path
+                 (plist-get project :source-dir)
+                 category
+                 (teamake-preset--get-current-configuration-preset-name project))))
+    (teamake-preset--set-current project category preset)
+    preset))
+
+(defun teamake-preset-select-from-path (source-dir category &optional configure-preset)
+  "Read presets from SOURCE-DIR and prompt user selection from CATEGORY.
+
+The preset that can be selected must not be hidden nor condition not met.
+If the CATEGORY is anything other than :configurePresets, the optional argument
+CONFIGURE-PRESET is used to discriminate against a preset not matching that
+:configurePreset.  If all presets of CATEGORY are to be presented, no
+CONFIGURE-PRESET should be provided."
+  (let* ((presets (teamake-preset-parse-presets source-dir))
+         (selectable (teamake-preset--selectable-presets presets category configure-preset))
+         (preset (teamake-preset--prompt-selection selectable category)))
+    (teamake-preset--fuse preset presets)
+    ))
+
+(defun teamake-preset-expand-macros-from-project (project values)
+  "In PROJECT expand all macros for VALUES."
+  (let ((source-dir (plist-get project :source-dir)))
+    (seq-map (lambda (value) (teamake-expand-expression
+                              value (plist-get project :source-dir)
+                              (lambda (text source-dir)
+                                (teamake-preset--expand-macro text preset source-dir))))
+             values)))
+
+
+
+
 (defun teamake-preset--get-user-selectable-configure-presets (presets)
   "Filter out user selectable configuration presets from PRESETS."
   (teamake-preset--get-user-selectable-presets presets :configurePresets))
 
-(defun teamake-preset--get-user-selectable-build-presets (configure-preset presets)
+(defun teamake-preset--get-user-selectable-build-presets (presets configure-preset)
   "Filter out user selectable build presets from PRESETS matching the CONFIGURE-PRESET."
   (teamake-preset--get-user-selectable-presets presets :buildPresets configure-preset))
 
@@ -365,17 +495,21 @@ If optional value CONFIGURE-PRESET is given the preset must match that preset. U
   "Filter out user selectable test presets from PRESETS matching the CONFIGURE-PRESET."
   (teamake-preset--get-user-selectable-presets presets :testPresets configure-preset))
 
-(defun teamake-preset--get-current-preset (project preset-type)
-  "Return current PRESET-TYPE from PROJECT."
+(defun teamake-preset--get-current (project category)
+  "Return current CATEGORY from PROJECT."
   (interactive)
   (let ((presets (teamake-get-current-values 'teamake-preset project)))
-    (plist-get presets preset-type)))
+    (message "(plist-get presets category)=%s" (plist-get presets category))
+    (plist-get presets category)
+    ))
 
-(defun teamake-preset--set-current-preset (project preset-type preset)
-  "Set current PRESET-TYPE in PROJECT to PRESET."
+(defun teamake-preset--set-current (project category preset)
+  "Set current CATEGORY in PROJECT to PRESET."
   (interactive)
   (let ((presets (teamake-get-current-values 'teamake-preset project)))
-    (plist-put presets preset-type preset)))
+     (setq presets (plist-put presets category preset))
+    (teamake-set-current-values 'teamake-preset project presets)))
+
 
 
 
@@ -385,16 +519,16 @@ If optional value CONFIGURE-PRESET is given the preset must match that preset. U
 (defun teamake-preset--get-current-configuration-preset (project)
   "Return current configuration preset from PROJECT."
   (interactive)
-  (teamake-preset--get-current-preset project :configurePreset))
+  (teamake-preset--get-current project :configurePresets))
 
 (defun teamake-preset--get-current-build-preset (project)
   "Return current build preset for PROJECT."
   (interactive)
-  (teamake-preset--get-current-preset project :buildPreset))
+  (teamake-preset--get-current project :buildPresets))
 
 (defun teamake-preset--get-current-test-preset (project)
   "Return current test preset for PROJECT."
-  (teamake-preset--get-current-preset project :testPreset))
+  (teamake-preset--get-current project :testPresets))
 
 (defun teamake-preset--get-current-configuration-preset-name (project)
   "Return current configuration preset name from PROJECT."
@@ -403,43 +537,42 @@ If optional value CONFIGURE-PRESET is given the preset must match that preset. U
 
 (defun teamake-preset--set-current-configuration-preset (project preset)
   "Set current configuration preset in PROJECT to PRESET."
-  (teamake-preset--set-current-preset project :configurePreset preset))
+  (teamake-preset--set-current project :configurePresets preset))
 
 (defun teamake-preset--set-current-build-preset (project preset)
   "Set current build PRESET in PROJECT."
-  (teamake-preset--set-current-preset project :buildPreset preset))
+  (teamake-preset--set-current project :buildPresets preset))
 
 (defun teamake-preset--set-current-test-preset (project preset-name)
   "Set current test PRESET in PROJECT."
-  (teamake-preset--set-current-preset project :testPreset preset))
+  (teamake-preset--set-current project :testPresets preset))
 
-(defun teamake-preset-select-configuration-preset (project)
+(defun teamake-preset-select-configuration (project)
   "Select a CMake configuration preset from PROJECT."
   (interactive)
-  ;; (teamake-preset-select project :configrePresets))
-  (teamake-preset-select-configuration-preset-from-path (plist-get project :source-dir)))
+  (let ((preset (teamake-preset-select-configuration-preset-from-path
+                 (plist-get project :source-dir)))
+        (current-presets (teamake-get-current-values 'teamake-preset project)))
+    (plist-put current-presets preset :configurePresets)
+    (teamake-set-current-values 'teamake-preset project current-presets)
+    preset))
 
-
-
-
-;;; TODO: Rethink this one...
-(defun teamake-preset-select (project preset-type &optional show-all)
-  "Read all presets from PROJECT and return all of type PRESET-TYPE.
-
-If SHOW-ALL is nil and PROJECT has current teamake-preset :configurePreset
-property set, limit the output by only displaying presets matching that
-configuration preset. If the optional SHOW-ALL is non-nil, do not limit
-the selection."
+(defun teamake-preset-select-build (project)
+  "Select a CMake build preset from PROJECT."
+  (interactive)
   (let* ((presets (teamake-preset-parse-presets (plist-get project :source-dir)))
-         (user-selectable-presets
-          (teamake-preset--get-user-selectable-presets
-           presets
-           preset-type
-           (unless show-all (plist-get (teamake-preset--get-current-preset project :configurePreset) :name))))
-         (names (seq-map (lambda (p) (teamake-preset--display-name-from-preset p))
-                         user-selectable-presets))
-         (selected-preset-name (completing-read (format "%s: " preset-type) names '() t)))
-    (teamake-preset--get-preset-from-name selected-preset-name presets)))
+         (configuration-preset (teamake-preset--get-current-configuration-preset project))
+         (selectable-build-presets
+          (teamake-preset--get-user-selectable-build-presets
+           presets (plist-get configuration-preset :name)))
+         (selectable-names
+          (seq-do (lambda (p) (teamake-preset--display-name-from-preset p))
+                  selectable-build-presets))
+         (build-preset-name (completing-read "Build preset: " selectable-names '() t))
+         (build-preset (teamake-preset--get-preset-from-name build-preset-name selectable-build-presets))
+         (fused-build-preset (teamake-preset--fuse (build-preset presets))))
+    (teamake-preset--set-current-build-preset fused-build-preset)
+    fused-build-preset))
 
 (defun teamake-preset-select-configuration-preset-from-path (source-path)
   "Read all configuration presets from SOURCE-PATH and preset to user."
@@ -461,7 +594,7 @@ the selection."
   (let* ((presets (teamake-preset-parse-presets (plist-get project :source-dir)))
          (config-preset (teamake-preset--get-current-configuration-preset-name project))
          (user-selectable-presets
-          (teamake-preset--get-user-selectable-build-presets config-preset presets))
+          (teamake-preset--get-user-selectable-build-presets presets config-preset))
 
          (names
           (seq-map (lambda (p) (teamake-preset--display-name-from-preset p))

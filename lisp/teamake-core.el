@@ -43,7 +43,7 @@
   "Face for teamake project name."
   :group 'teamake-faces)
 
-(defface teamake-project-path
+(defface teamake-path
   '((((class color) (background light)) :foreground "Medium aquamarine")
     (((class color) (background  dark)) :foreground "Medium aquamarine"))
   "Face for teamake project path."
@@ -81,12 +81,50 @@ Used in calls to cmake, ctest, cpack, etc."
 (defvar teamake-project-configurations '()
   "Available configured projects to use.")
 
+(if '()
+    (transient-setup 'teamake-configure '() '()
+                     :scope (caddr teamake-project-configurations)
+                     :value (alist-get 'teamake-configure (plist-get (caddr teamake-project-configurations) :current)))
+    )
+
+
+;; Save and load projects
+;;;;;;;;;;;;;;;;;;;;;;;;;
+
+;;;###autoload
+(defun teamake-load-project-configurations ()
+  "Initialize project configurations from save file.
+
+Load contents of the file specified by `teamake-project-configurations-file'
+into the variable `teamake-project-configurations'."
+  (interactive)
+  (if (file-exists-p teamake-project-configurations-file)
+      (setq teamake-project-configurations
+            (with-temp-buffer
+              (insert-file-contents teamake-project-configurations-file)
+              (read (current-buffer))))))
+
+;;;###autoload
+(defun teamake-save-project-configurations ()
+  "Save project configurations to file.
+
+Write the contents of the variable `teamake-project-configurations' to the
+file specified by `teamake-project-configurations-file'."
+  (interactive)
+  (with-temp-buffer
+    (insert ";;; -*- lisp-data -*-\n")
+    (let ((print-length '())
+          (print-level '()))
+      (pp teamake-project-configurations (current-buffer)))
+    (write-region '() '() teamake-project-configurations-file '() 'silent)))
+
 (defun teamake-setup-transient (transient project)
   "Setup TRANSIENT with values from PROJECT."
   (interactive)
-  (transient-setup transient '() '()
-                   :scope project
-                   :value (teamake-get-current-values transient project)))
+  (let ((current (teamake-get-current-values transient project)))
+    (transient-setup transient '() '()
+                     :scope project
+                     :value current)))
 
 (defun teamake-set-current-values (transient project value)
   "Set current value in PROJECT for TRANSIENT to VALUE."
@@ -94,13 +132,44 @@ Used in calls to cmake, ctest, cpack, etc."
     (plist-put project :current '()))
   (let* ((current (plist-get project :current))
          (existing (alist-get transient current)))
-    (if (not existing)
-        (push (cons transient value) (plist-get project :current))
-      (setf (alist-get transient current) value))))
+    (if existing
+        (setf (alist-get transient current) value)
+      (push (cons transient value) (plist-get project :current)))))
 
-(defun teamake-get-current-values (transient project)
+;; (defun teamake-get-current-values (transient project)
+(transient-define-suffix teamake-get-current-values (transient project)
   "Get current value in PROJECT for TRANSIENT."
+  (interactive)
   (alist-get transient (plist-get project :current)))
+
+(defun teamake-set-save-values (transient project name values)
+  "Set a save record in PROJECT for TRANSIENT to NAME containing VALUES."
+  (unless (plist-member project :save)
+    (plist-put project :save '()))
+  (let ((pair (cons name values))
+        (existing (alist-get transient (plist-get project :save))))
+    (if (not existing)
+        (setf (alist-get transient (plist-get project :save)) (list pair))
+      (push pair (alist-get transient (plist-get project :save))))))
+
+(defun teamake-get-save-value (transient project name)
+  "Return specific saved value with NAME in PROJECT for TRANSIENT."
+  (cdr
+   (seq-find
+    (lambda (pair)
+      (string= (car pair) name))
+    (teamake-get-save-values transient project))))
+
+(defun teamake-get-save-values (transient project)
+  "Return name of all saved values in PROJECT for TRANSIENT."
+  (alist-get transient (plist-get project :save)))
+
+(defun teamake-get-save-names (transient project)
+  "Return name of all saved values in PROJECT for TRANSIENT."
+  (interactive)
+  (seq-map (lambda (s)
+             (car s))
+           (teamake-get-save-values transient project)))
 
 (defun teamake--find-root (path filename)
   "Look for the dominating FILENAME in PATH.
@@ -180,16 +249,29 @@ in any way."
      (teamake--project-contains-p proj (directory-file-name path)))
    teamake-project-configurations))
 
-(defun teamake--select-source-dir ()
-  "Prompt user for source directory.
+(defun teamake--select-source-dir (&optional initial)
+  "Prompt user for source directory starting at optional INITIAL.
 
 Ensure it is a cmake project (containing CMakeLists.txt) and
 make sure the path does not end in directory separator."
-  (let ((source-dir (read-directory-name "CMake source dir: " '() '() t)))
+  (let* ((initial (or initial default-directory))
+         (source-dir (read-directory-name "CMake source dir: " initial '() t)))
     (while (not (teamake--find-root source-dir "CMakeLists.txt"))
       (setq source-dir (read-directory-name
                          "Invalid CMake project, select new (must contain CMakeLists.txt): " '() '() t)))
     (directory-file-name source-dir)))
+
+(defun teamake--select-binary-dir (&optional initial)
+  "Prompt user for binary directory starting at optional INITIAL.
+
+Ensure it is a cmake binary dir (containing CMakeCache.txt) and
+make sure the path does not end in directory separator."
+  (let* ((initial (or initial default-directory))
+         (binary-dir (read-directory-name "CMake binary dir: " initial '() t)))
+    (while (not (teamake--find-root binary-dir "CMakeCache.txt"))
+      (setq binary-dir (read-directory-name
+                         "Invalid CMake binary dir, select new (must contain CMakeCache.txt): " '() '() t)))
+    (directory-file-name binary-dir)))
 
 ;; (read-multiple-choice
 ;;  "Continue connecting?"

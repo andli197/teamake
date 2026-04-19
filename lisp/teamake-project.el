@@ -2,40 +2,11 @@
 ;;; Commentary:
 ;;; Code:
 
+(require 'transient)
 (require 'teamake-core)
 (require 'teamake-configure)
-(require 'transient)
-
-
-;; Save and load projects
-;;;;;;;;;;;;;;;;;;;;;;;;;
-
-;;;###autoload
-(defun teamake-load-project-configurations ()
-  "Initialize project configurations from save file.
-
-Load contents of the file specified by `teamake-project-configurations-file'
-into the variable `teamake-project-configurations'."
-  (interactive)
-  (if (file-exists-p teamake-project-configurations-file)
-      (setq teamake-project-configurations
-            (with-temp-buffer
-              (insert-file-contents teamake-project-configurations-file)
-              (read (current-buffer))))))
-
-;;;###autoload
-(defun teamake-project--write-project-configurations ()
-  "Save project configurations to file.
-
-Write the contents of the variable `teamake-project-configurations' to the
-file specified by `teamake-project-configurations-file'."
-  (interactive)
-  (with-temp-buffer
-    (insert ";;; -*- lisp-data -*-\n")
-    (let ((print-length '())
-          (print-level '()))
-      (pp teamake-project-configurations (current-buffer)))
-    (write-region '() '() teamake-project-configurations-file '() 'silent)))
+(require 'teamake-build)
+(require 'teamake-preset)
 
 ;; Display and select project
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
@@ -56,7 +27,7 @@ file specified by `teamake-project-configurations-file'."
             (propertize (or (plist-get project :name) "")
                         'face 'teamake-project-name)
             (propertize (or (plist-get project :source-dir) "")
-                        'face 'teamake-project-path))))
+                        'face 'teamake-path))))
 
 (defun teamake-project-from-display (display)
   "Return PROJECT from DISPLAY."
@@ -298,16 +269,48 @@ configuration values."
   (teamake-project--write-project-configurations))
 
 (transient-define-suffix teamake-project--teamake-configure ()
-  :description "Configure options"
+  :description "Configure"
   :transient 'transient--do-recurse
   (interactive)
   (teamake-setup-transient 'teamake-configure (transient-scope)))
 
+(teamake-get-current-values 'teamake-build (caddr teamake-project-configurations))
+
 (transient-define-suffix teamake-project--teamake-build ()
-  :description "Build options"
+  :description "Build"
   :transient 'transient--do-recurse
   (interactive)
-  (teamake-setup-transient 'teamake-build (transient-scope)))
+  (let* ((project (transient-scope))
+         (binary-dir '()))
+
+    (seq-do
+     (lambda (p)
+       (save-match-data
+         (if (string-match "-B=\\(.+\\)" p)
+             (setq binary-dir (match-string 1 p)))))
+     (teamake-get-current-values 'transient-build project))
+
+    (unless binary-dir
+      (seq-do
+       (lambda (p)
+         (save-match-data
+           (if (string-match "-B=\\(.+\\)" p)
+               (setq binary-dir (match-string 1 p)))))
+       (teamake-get-current-values 'transient-configure project)))
+
+    (unless binary-dir
+      (setq binary-dir default-directory))
+    
+    (transient-setup
+     'teamake-build '() '()
+     :scope binary-dir
+     :value (teamake-get-current-values 'teamake-build (transient-scope)))))
+
+(transient-define-suffix teamake-project--teamake-preset ()
+  :description "Preset"
+  :transient 'transient--do-recurse
+  (interactive)
+  (teamake-setup-transient 'teamake-preset (transient-scope)))
 
 (defun teamake-project--read-project-name-from-cmakelists (source-dir)
   "Read project name from CMakeLists.txt located in SOURCE-DIR."
@@ -346,6 +349,7 @@ configuration values."
    :description "CMake"
    ("c" teamake-project--teamake-configure)
    ("b" teamake-project--teamake-build)
+   ("p" teamake-project--teamake-preset)
    ;; ("t" teamake-project--teamake-test)
    ;; ("p" teamake-project--teamake-package)
    ]
