@@ -68,7 +68,7 @@
          (name (completing-read "Configuration name (match will overwrite): " existing-names)))
     (teamake-set-save-values 'teamake-configure project name (transient-args 'teamake-configure))))
 
-(transient-define-suffix teamake-configure--load-configuration ()
+(transient-define-suffix teamake-configure--load ()
   "Load a previously saved configuration."
   (interactive)
   (let* ((project (transient-scope))
@@ -258,8 +258,7 @@
     ("gr" "Generate graphviz of dependencies"
      "--graphviz="
      :prompt "Graphviz output: "
-     :reader transient-read-file)]
-   ]
+     :reader transient-read-file)]]
   [["Warnings"
     ("-ww" "Enable developer warnings"
      "-Wdev")
@@ -277,32 +276,31 @@
      "-Werror=deprecated")
     ("-wM" "Make deprecated macro and function warnings not errors"
      "-Wno-error=deprecated")]
-    ["Debug"
-     ("-cli" "Don't warn about command line options"
-      "--no-warn-unused-cli")
-     ("-csv" "Find problems with variable usage in system files"
-      "--check-system-vars")
-     ("-cne" "Compile no warnings as error"
-      "--compile-no-warning-as-error")
-     ("-lc" " Prepend log messages with context, if given"
-      "--log-context")
-     ("-dt" " Do not delete the try_compile build tree"
-      "--debug-trycompile")
-     ("-do" " Put cmake in a debug mode"
-      "--debug-output")
-     ("-df" " Put cmake find in a debug mode"
-      "--debug-find")
-     ("dfp" " Limit cmake debug-find to the comma-separated list of packages"
-      "--debug-find-pkg="
-      :prompt "Packages (comma separated): ")
-     ("dfv" " Limit cmake debug-find to the comma-separated list of result variables"
-      "--debug-find-var="
-      :prompt "Variables (comma separated): ")
-     ("dsi" " Dump information about this system"
-      "--system-information="
-      :prompt "Select system dump file: "
-      :reader transient-read-file)]
-    ]
+   ["Debug"
+    ("-cli" "Don't warn about command line options"
+     "--no-warn-unused-cli")
+    ("-csv" "Find problems with variable usage in system files"
+     "--check-system-vars")
+    ("-cne" "Compile no warnings as error"
+     "--compile-no-warning-as-error")
+    ("-lc" " Prepend log messages with context, if given"
+     "--log-context")
+    ("-dt" " Do not delete the try_compile build tree"
+     "--debug-trycompile")
+    ("-do" " Put cmake in a debug mode"
+     "--debug-output")
+    ("-df" " Put cmake find in a debug mode"
+     "--debug-find")
+    ("dfp" " Limit cmake debug-find to the comma-separated list of packages"
+     "--debug-find-pkg="
+     :prompt "Packages (comma separated): ")
+    ("dfv" " Limit cmake debug-find to the comma-separated list of result variables"
+     "--debug-find-var="
+     :prompt "Variables (comma separated): ")
+    ("dsi" " Dump information about this system"
+     "--system-information="
+     :prompt "Select system dump file: "
+     :reader transient-read-file)]]
   [["Trace"
     ("-trm" "Put cmake in trace mode" "--trace")
     ("-tre" "Put cmake in trace mode with variable expansion"
@@ -340,21 +338,20 @@
     "--profiling-output="
     :prompt "Select profiling output: "
     :reader transient-read-file)]
-   [["Do"
+  [["Do"
     ("xx" "Execute current" teamake-configure--do-configure :transient t)
     ("xp" "Execute preset" teamake-configure--select-and-execute-preset :transient t)
     ("xb" teamake-configure--build-menu :transient t)]
-    ["Manage"
-     ("xsc" "Save current" teamake-configure--save-current :transient t)
-     ("xsa" "Save as" teamake-configure--save-current-as :transient t)
-     ("xl" "Load configuration" teamake-configure--load-configuration)]
-    ]
-   (interactive
-    (let ((project-root (teamake--find-root default-directory "CMakeLists.txt"))
-          (no-project (list :name "No CMake project" :source-dir default-directory)))
-      (list (if project-root (teamake--project-from-path project-root)
-              no-project))))
-   (teamake-setup-transient 'teamake-configure project))
+   ["Manage"
+    ("xsc" "Save" teamake-configure--save-current :transient t)
+    ("xsa" "Save as" teamake-configure--save-current-as :transient t)
+    ("xl" " Load" teamake-configure--load)]]
+  (interactive
+   (let ((project-root (teamake--find-root default-directory "CMakeLists.txt"))
+         (no-project (list :name "No CMake project" :source-dir default-directory)))
+     (list (if project-root (teamake--project-from-path project-root)
+             no-project))))
+  (teamake-setup-transient 'teamake-configure project))
 
 
 (provide 'teamake-configure)
