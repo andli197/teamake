@@ -52,12 +52,12 @@
                      :scope binary-dir
                      :value values)))
 
-(defun teamake-build--project-contains-p (project build-tree)
-  "Determine if PROJECT is matching BUILD-TREE."
+(defun teamake-build--project-contains-p (project binary-dir)
+  "Determine if PROJECT is matching BINARY-DIR."
   (or (teamake-build--build-path-matches-p
-       (teamake-get-current-values 'teamake-build project) build-tree)
+       (teamake-get-current-values 'teamake-build project) binary-dir)
       (teamake-build--build-path-matches-p
-       (teamake-get-current-values 'teamake-configure project) build-tree)))
+       (teamake-get-current-values 'teamake-configure project) binary-dir)))
 
 (defun teamake-build--parse-variable-line (line)
   "Parse a CMakeCache line.
@@ -79,11 +79,11 @@ is interpret as ON, all other values are interpret as OFF."
                             "OFF"))
                          (t value))))))
 
-(defun teamake-build--parse-cmake-cache (build-tree)
-  "Parse all options in the form <NAME>(:[TYPE])=<VALUE> from BUILD-TREE.
+(defun teamake-build--parse-cmake-cache (binary-dir)
+  "Parse all options in the form <NAME>(:[TYPE])=<VALUE> from BINARY-DIR.
 
 Return the options as an property list."
-  (let* ((cache-file (file-name-concat build-tree "CMakeCache.txt"))
+  (let* ((cache-file (file-name-concat binary-dir "CMakeCache.txt"))
          (contents (and (file-exists-p cache-file)
                         (with-temp-buffer
                           (insert-file-contents cache-file)
@@ -105,26 +105,27 @@ Return the options as an property list."
               parsed-cache)
              :value))
 
-(defun teamake-build--read-source-dir-from-cmake-cache (build-tree &optional cache)
-  "Read the <PROJECT_NAME>_SOURCE_DIR cache variable from BUILD-TREE."
-  (let* ((cache (or cache (teamake-build--parse-cmake-cache build-tree)))
+(defun teamake-build--read-source-dir-from-cmake-cache (binary-dir &optional cache)
+  "Read the <PROJECT_NAME>_SOURCE_DIR cache variable from BINARY-DIR."
+  (let* ((cache (or cache (teamake-build--parse-cmake-cache binary-dir)))
          (project-name (teamake-build--cache-objects--get-variable cache "CMAKE_PROJECT_NAME")))
     (teamake-build--cache-objects--get-variable cache (format "%s_SOURCE_DIR" project-name))))
 
-(defun teamake-build--read-project-name-from-cmake-cache (build-tree)
-  "Read CMAKE_PROJECT_NAME cache variable from BUILD-TREE."
-  (let ((cache (teamake-build--parse-cmake-cache build-tree)))
+(defun teamake-build--read-project-name-from-cmake-cache (binary-dir)
+  "Read CMAKE_PROJECT_NAME cache variable from BINARY-DIR."
+  (let ((cache (teamake-build--parse-cmake-cache binary-dir)))
     (teamake-build--cache-objects--get-variable cache "CMAKE_PROJECT_NAME")))
 
-(defun teamake-build--project-name-from-build-tree (build-tree)
-  "Present name of BUILD-TREE.
+(defun teamake-build--project-name-from-binary-dir (binary-dir)
+  "Present name of BINARY-DIR.
 
 Fetch project name among projects if any project has an association to
-BUILD-TREE.  If no such association exists, try and parse project name
+BINARY-DIR.  If no such association exists, try and parse project name
 from CMakeCache.txt.  If no CMakeCache.txt could be located, return a
 default project name."
-  (or (plist-get (teamake--project-from-path build-tree) :name)
-      (teamake-build--read-project-name-from-cmake-cache build-tree)
+  (interactive)
+  (or (plist-get (teamake--project-from-path binary-dir) :name)
+      (teamake-build--read-project-name-from-cmake-cache binary-dir)
       "Undetermined project"))
 
 (defun teamake-build--read-build-targets (build-path)
@@ -206,12 +207,12 @@ target in the build tree."
 (defun teamake-build--source-dir-p (name entry)
   (string= (plist-get entry :name) (format "%s_SOURCE_DIR" (plist-get name :value))))
 
-(defun teamake-build--source-dir-from-build-tree (build-tree)
-  "Try to resolve code-dir from BUILD-TREE.
+(defun teamake-build--source-dir-from-binary-dir (binary-dir)
+  "Try to resolve code-dir from BINARY-DIR.
 
-Either the BUILD-TREE contains a CMakeCache variable specifying
-code-tree, or a configured project has a reference to BUILD-TREE."
-  (let* ((cache (teamake-build--parse-cmake-cache build-tree))
+Either the BINARY-DIR contains a CMakeCache variable specifying
+code-tree, or a configured project has a reference to BINARY-DIR."
+  (let* ((cache (teamake-build--parse-cmake-cache binary-dir))
          (name (teamake-build--get-cache-value-from-name cache "CMAKE_PROJECT_NAME"))
          (code (teamake-build--get-cache-value-from-name cache (format "%s_SOURCE_DIR" name))))
     (and code (file-exists-p code) code)))
@@ -246,7 +247,7 @@ code-tree, or a configured project has a reference to BUILD-TREE."
   (interactive)
   (let* ((current-binary-dir (transient-scope))
          (binary-dir (teamake--select-binary-dir current-binary-dir))
-         (source-dir (teamake-build--source-dir-from-build-tree binary-dir))
+         (source-dir (teamake-build--source-dir-from-binary-dir binary-dir))
          (project (teamake--project-from-path source-dir))
          (current-values (teamake-get-current-values 'cmake-build project))
          (new-values (list (format "-S=%s" source-dir))))
@@ -280,15 +281,54 @@ code-tree, or a configured project has a reference to BUILD-TREE."
                                  value))
                              values))))
 
+(defun teamake-build--set-current (project binary-dir values)
+  "Set VALUES for current BINARY-DIR in PROJECT."
+  (interactive)
+  (teamake-set-current-values
+   'teamake-build project
+   (list :scope binary-dir :value values)))
 
+(transient-define-suffix teamake-build--save-current ()
+  "Save current build settings."
+  (interactive)
+  (let* ((binary-dir (transient-scope))
+         (project (teamake-build--project-from-binary-dir binary-dir))
+         (values (transient-args 'teamake-build)))
+    (teamake-build--set-current project binary-dir values)))
+
+(transient-define-suffix teamake-build--save-current-as ()
+  "Save the current build settings with a name."
+  (interactive)
+  (let* ((binary-dir (transient-scope))
+         (project (teamake-build--project-from-binary-dir binary-dir))
+         (values (transient-args 'teamake-build))
+         (existing-names (teamake-get-save-names 'teamake-build project))
+         (name (completing-read "Build name (match will be overwritten): "
+                                existing-names)))
+    (teamake-set-save-values 'teamake-build project name
+                             (list :scope binary-dir :value values))))
+
+(transient-define-suffix teamake-build--load ()
+  "Load a previously saved setting."
+  (interactive)
+  (let* ((binary-dir (transient-scope))
+         (project (teamake-build--project-from-binary-dir binary-dir))
+         (existing-names (teamake-get-save-names 'teamake-build project))
+         (name-to-load (completing-read "Build: " existing-names '() t))
+         (value (teamake-get-save-value 'teamake-build project name-to-load)))
+
+    (transient-setup 'teamake-build '() '()
+                     :scope (plist-get value :scope)
+                     :value (plist-get value :value)
+                     )))
 
 ;;;###autoload
-(transient-define-prefix teamake-build (build-tree)
+(transient-define-prefix teamake-build (binary-dir)
   [:description
    ;; "CMake Build"
    (lambda () (format "%s %s (%s)\n"
                       (propertize "CMake Build" 'face 'teamake-heading)
-                      (propertize (or (teamake-build--project-name-from-build-tree (transient-scope))
+                      (propertize (or (teamake-build--project-name-from-binary-dir (transient-scope))
                                       "Undetermined project")
                                   'face 'teamake-project-name)
                       (propertize (transient-scope) 'face 'teamake-path)))
@@ -319,14 +359,18 @@ code-tree, or a configured project has a reference to BUILD-TREE."
    ;;  :class transient-option
    ;;  :prompt "Options: ")
    ]
-  ["Do"
-   ("xx" teamake-build--build-current)
-   ("xp" teamake-build--build-preset)
-   ]
+  [["Do"
+    ("xx" teamake-build--build-current)
+    ("xp" teamake-build--build-preset)]
+   ["Manage"
+    ("xsc" "Save" teamake-build--save-current :transient t)
+    ("xsa" "Save as" teamake-build--save-current-as :transient t)
+    ("xl" " Load" teamake-build--load)]]
   (interactive
    (list (or (teamake--find-root default-directory "CMakeCache.txt")
              (directory-file-name default-directory))))
-  (teamake-build--setup-transient-from-path build-tree))
+  (teamake-build--setup-transient-from-path binary-dir)
+  )
 
 
 

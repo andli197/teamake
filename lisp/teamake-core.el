@@ -81,13 +81,6 @@ Used in calls to cmake, ctest, cpack, etc."
 (defvar teamake-project-configurations '()
   "Available configured projects to use.")
 
-(if '()
-    (transient-setup 'teamake-configure '() '()
-                     :scope (caddr teamake-project-configurations)
-                     :value (alist-get 'teamake-configure (plist-get (caddr teamake-project-configurations) :current)))
-    )
-
-
 ;; Save and load projects
 ;;;;;;;;;;;;;;;;;;;;;;;;;
 
@@ -136,11 +129,11 @@ file specified by `teamake-project-configurations-file'."
         (setf (alist-get transient current) value)
       (push (cons transient value) (plist-get project :current)))))
 
-;; (defun teamake-get-current-values (transient project)
 (transient-define-suffix teamake-get-current-values (transient project)
   "Get current value in PROJECT for TRANSIENT."
   (interactive)
   (alist-get transient (plist-get project :current)))
+
 
 (defun teamake-set-save-values (transient project name values)
   "Set a save record in PROJECT for TRANSIENT to NAME containing VALUES."
@@ -148,9 +141,13 @@ file specified by `teamake-project-configurations-file'."
     (plist-put project :save '()))
   (let ((pair (cons name values))
         (existing (alist-get transient (plist-get project :save))))
-    (if (not existing)
-        (setf (alist-get transient (plist-get project :save)) (list pair))
-      (push pair (alist-get transient (plist-get project :save))))))
+    (if (alist-get name existing '() '() 'string=)
+        (setf (alist-get name existing '() '() 'string=)
+              values)
+      (setf (alist-get transient (plist-get project :save))
+            (if existing
+                (push pair existing)
+            (list pair))))))
 
 (defun teamake-get-save-value (transient project name)
   "Return specific saved value with NAME in PROJECT for TRANSIENT."
@@ -236,7 +233,7 @@ or current `teamake-configure'
 can mention PATH in any way for it to be considered a match."
   (or (string= (directory-file-name (plist-get project :source-dir))
                (directory-file-name path))
-      (teamake--path-matches-p (teamake-get-current-values 'teamake-build project) path)
+      (teamake--path-matches-p (plist-get (teamake-get-current-values 'teamake-build project) :scope) path)
       (teamake--path-matches-p (teamake-get-current-values 'teamake-configure project) path)))
 
 (defun teamake--project-from-path (path)

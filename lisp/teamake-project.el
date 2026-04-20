@@ -274,37 +274,17 @@ configuration values."
   (interactive)
   (teamake-setup-transient 'teamake-configure (transient-scope)))
 
-(teamake-get-current-values 'teamake-build (caddr teamake-project-configurations))
-
 (transient-define-suffix teamake-project--teamake-build ()
   :description "Build"
   :transient 'transient--do-recurse
+  :if (lambda () (teamake-get-current-values 'teamake-build (transient-scope)))
   (interactive)
   (let* ((project (transient-scope))
-         (binary-dir '()))
-
-    (seq-do
-     (lambda (p)
-       (save-match-data
-         (if (string-match "-B=\\(.+\\)" p)
-             (setq binary-dir (match-string 1 p)))))
-     (teamake-get-current-values 'transient-build project))
-
-    (unless binary-dir
-      (seq-do
-       (lambda (p)
-         (save-match-data
-           (if (string-match "-B=\\(.+\\)" p)
-               (setq binary-dir (match-string 1 p)))))
-       (teamake-get-current-values 'transient-configure project)))
-
-    (unless binary-dir
-      (setq binary-dir default-directory))
-    
-    (transient-setup
-     'teamake-build '() '()
-     :scope binary-dir
-     :value (teamake-get-current-values 'teamake-build (transient-scope)))))
+         (current-values (teamake-get-current-values 'teamake-build project)))
+    (if current-values
+        (transient-setup 'teamake-build '() '()
+                         :scope (plist-get current-values :scope)
+                         :value (plist-get current-values :value)))))
 
 (transient-define-suffix teamake-project--teamake-preset ()
   :description "Preset"
@@ -361,8 +341,7 @@ configuration values."
    ]
   (interactive
    (let ((project-root (teamake--find-root default-directory "CMakeLists.txt")))
-     (list (teamake--project-from-path (or project-root
-                                           default-directory)))))
+     (list (teamake--project-from-path (or project-root default-directory)))))
   (transient-setup 'teamake-project '() '() :scope project)
   )
 

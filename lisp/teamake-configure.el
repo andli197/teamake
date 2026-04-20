@@ -26,18 +26,18 @@
   (let* ((project (transient-scope))
          (current-args (transient-args 'teamake-configure))
          (source-dir (plist-get project :source-dir))
-         ;; (arguments (seq-map
-         ;;            (lambda (cmd)
-         ;;              (teamake-project--expand-variables-from-project project cmd)
-         ;;              (teamake-expand-expression cmd source-dir)
-         ;;              current-args)))
+         (expanded-args
+          (seq-map
+           (lambda (value)
+             (teamake-configure--expand-macro-in-current-value value project))
+           current-args))
          )
     (teamake-set-current-values 'teamake-configure project current-args)
     (apply #'teamake-process-invoke-cmake
            project
            "-S"
            source-dir
-           current-args)))
+           expanded-args)))
 
 (transient-define-suffix teamake-configure--select-and-execute-preset ()
   "Select a configuration preset and execute it without reading."
@@ -191,43 +191,41 @@
       )
     values))
 
+(defun teamake-configure--expand-macro-in-current-value (value project)
+  "Replace any macro expressions in VALUE for PROJECT.
+
+Use current configure preset as base for preset specific expansions."
+  (teamake-expand-expression
+   value
+   (plist-get project :source-dir)
+   (lambda (text source-dir)
+     (teamake-preset--expand-macro
+      text (teamake-preset--get-current project :configurePresets) source-dir))))
+
 (transient-define-suffix teamake-configure--build-menu ()
   :description "Visit build tree"
   (interactive)
-  (let ((project (transient-scope))
-        (values (transient-args 'teamake-configure)))
+  (let* ((project (transient-scope))
+         (values (transient-args 'teamake-configure))
+         (binary-dir (teamake-configure--expand-macro-in-current-value
+                      (transient-arg-value "-B=" values)
+                      project)))
+
     (transient-setup 'teamake-build '() '()
-                     :scope (transient-arg-value "-B=" values)
-                     :value (list (format "-S=%s" (plist-get (transient-scope) :source-dir))))
-  ))
+                     :scope binary-dir
+                     :value (list (format "-S=%s" (plist-get project :source-dir))))))
 
 (transient-define-suffix teamake-configure--select-preset ()
   :description "Read from preset"
   (interactive)
   (let* ((project (transient-scope))
          (preset (teamake-preset-select-from-project project :configurePresets))
-         ;; (preset (teamake-preset-select-configuration project))
          (values (teamake-configure--preset-to-values preset)))
-    (message "project=%s" project)
-    (message "preset=%s" preset)
-    (message "values=%s" values)
-
-
-    (setq tmp (seq-map (lambda (value)
-                (teamake-expand-expression
-                 value
-                 (plist-get project :source-dir)
-                 (lambda (text source-dir)
-                   (teamake-preset--expand-macro text preset source-dir))))
-                       values))
-    (message "tmp=%s" tmp)
     (teamake-set-current-values 'teamake-configure project values)
-    
     (teamake-setup-transient 'teamake-configure project)))
 
 ;;;###autoload
 (transient-define-prefix teamake-configure (project)
-  :value '("--install=bleh")
   [:description
    (lambda () (format "%s %s\n"
                       (propertize "CMake Configure" 'face 'teamake-heading)
@@ -276,31 +274,31 @@
      "-Werror=deprecated")
     ("-wM" "Make deprecated macro and function warnings not errors"
      "-Wno-error=deprecated")]
-   ["Debug"
-    ("-cli" "Don't warn about command line options"
-     "--no-warn-unused-cli")
-    ("-csv" "Find problems with variable usage in system files"
-     "--check-system-vars")
-    ("-cne" "Compile no warnings as error"
-     "--compile-no-warning-as-error")
-    ("-lc" " Prepend log messages with context, if given"
-     "--log-context")
-    ("-dt" " Do not delete the try_compile build tree"
-     "--debug-trycompile")
-    ("-do" " Put cmake in a debug mode"
-     "--debug-output")
-    ("-df" " Put cmake find in a debug mode"
-     "--debug-find")
-    ("dfp" " Limit cmake debug-find to the comma-separated list of packages"
-     "--debug-find-pkg="
-     :prompt "Packages (comma separated): ")
-    ("dfv" " Limit cmake debug-find to the comma-separated list of result variables"
-     "--debug-find-var="
-     :prompt "Variables (comma separated): ")
-    ("dsi" " Dump information about this system"
-     "--system-information="
-     :prompt "Select system dump file: "
-     :reader transient-read-file)]]
+    ["Debug"
+     ("-cli" "Don't warn about command line options"
+      "--no-warn-unused-cli")
+     ("-csv" "Find problems with variable usage in system files"
+      "--check-system-vars")
+     ("-cne" "Compile no warnings as error"
+      "--compile-no-warning-as-error")
+     ("-lc" " Prepend log messages with context, if given"
+      "--log-context")
+     ("-dt" " Do not delete the try_compile build tree"
+      "--debug-trycompile")
+     ("-do" " Put cmake in a debug mode"
+      "--debug-output")
+     ("-df" " Put cmake find in a debug mode"
+      "--debug-find")
+     ("dfp" " Limit cmake debug-find to the comma-separated list of packages"
+      "--debug-find-pkg="
+      :prompt "Packages (comma separated): ")
+     ("dfv" " Limit cmake debug-find to the comma-separated list of result variables"
+      "--debug-find-var="
+      :prompt "Variables (comma separated): ")
+     ("dsi" " Dump information about this system"
+      "--system-information="
+      :prompt "Select system dump file: "
+      :reader transient-read-file)]]
   [["Trace"
     ("-trm" "Put cmake in trace mode" "--trace")
     ("-tre" "Put cmake in trace mode with variable expansion"
