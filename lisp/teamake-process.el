@@ -18,29 +18,12 @@
     (with-current-buffer process-buf
       (goto-char (point-max))
       (set-marker (process-mark process) (point)))
-    ;; (pop-to-buffer process-buf)
+    (pop-to-buffer process-buf)
     process))
-
-(defun teamake-process--get-cmake-tool (&optional tool)
-  "Use the `teamake-process-cmake-tool-path' for locating TOOL.
-
-Locate the TOOL from cmake tool suite (cmake, ctest, cpack)
-using the configured `teamake-process-cmake-tool-path' or
-default configured PATH as a fallback."
-  (if (file-exists-p tool)
-      tool
-    (let* ((program (or tool "cmake"))
-           (location program)
-           (locations exec-path))
-      (add-to-list 'locations (file-name-directory teamake-process-cmake-tool-path))
-      (setq location (locate-file program locations exec-suffixes t))
-      (unless (file-exists-p location)
-        (user-error "Unable to locate program %s" program))
-      location)))
 
 (defun teamake-process-invoke-cmake (project &rest args)
   "Start processing a CMake command with ARGS using BUFFER-NAME as output."
-  (let ((executable (teamake-process--get-cmake-tool "cmake")))
+  (let ((executable (teamake--get-cmake-tool "cmake")))
     (apply #'teamake-process--start-process
            project
            executable
@@ -48,7 +31,7 @@ default configured PATH as a fallback."
 
 (defun teamake-process-invoke-ctest (project &rest args)
   "Start processing a CTest command with ARGS using BUFFER-NAME as output."
-  (let ((executable (teamake-process--get-cmake-tool "ctest")))
+  (let ((executable (teamake--get-cmake-tool "ctest")))
     (apply #'teamake-process--start-process
            project
            executable
@@ -56,7 +39,7 @@ default configured PATH as a fallback."
 
 (defun teamake-process-invoke-cpack (project &rest args)
   "Start processing a CPack command with ARGS using BUFFER-NAME as output."
-  (let ((executable (teamake-process--get-cmake-tool "cpack")))
+  (let ((executable (teamake--get-cmake-tool "cpack")))
     (apply #'teamake-process--start-process
            project
            executable
@@ -88,7 +71,7 @@ the `shell-file-name' is specified by `teamake-process-preferred-shell'."
 
 No output to the projects process buffer."
   (apply #'teamake-command-to-string
-         (teamake-process--get-cmake-tool "cmake")
+         (teamake--get-cmake-tool "cmake")
          args))
 
 (defun teamake-cmake-command-to-lines (&rest args)

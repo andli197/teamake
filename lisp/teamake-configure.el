@@ -43,14 +43,12 @@
   "Select a configuration preset and execute it without reading."
   (interactive)
   (let* ((project (transient-scope))
-         (source-dir (plist-get project :source-dir))
-         (preset (teamake-preset-select-configuration source-dir)))
+         (preset (teamake-preset-select-configuration project)))
     (apply #'teamake-process-invoke-cmake
            project
            "-S"
-           source-dir
+           (plist-get project :source-dir)
            (format "--preset=%s" (plist-get preset :name)))))
-
 
 (transient-define-suffix teamake-configure--save-current ()
   "Save the current configure as current for later use."
@@ -210,10 +208,7 @@ Use current configure preset as base for preset specific expansions."
          (binary-dir (teamake-configure--expand-macro-in-current-value
                       (transient-arg-value "-B=" values)
                       project)))
-
-    (transient-setup 'teamake-build '() '()
-                     :scope binary-dir
-                     :value (list (format "-S=%s" (plist-get project :source-dir))))))
+    (teamake-build--setup-transient-from-path binary-dir)))
 
 (transient-define-suffix teamake-configure--select-preset ()
   :description "Read from preset"
@@ -223,6 +218,16 @@ Use current configure preset as base for preset specific expansions."
          (values (teamake-configure--preset-to-values preset)))
     (teamake-set-current-values 'teamake-configure project values)
     (teamake-setup-transient 'teamake-configure project)))
+
+(defun teamake-configure--possible (project)
+  "Determine if PROJECT contain enough information for `teamake-configure'."
+  (interactive)
+  (let ((current (teamake-get-current-values 'teamake-configure project)))
+    current))
+
+(defun teamake-configure--setup (project)
+  "Setup `teamake-configure' from PROJECT."
+  (teamake-setup-transient 'teamake-configure project))
 
 ;;;###autoload
 (transient-define-prefix teamake-configure (project)
@@ -258,48 +263,42 @@ Use current configure preset as base for preset specific expansions."
      :prompt "Graphviz output: "
      :reader transient-read-file)]]
   [["Warnings"
-    ("-ww" "Enable developer warnings"
-     "-Wdev")
-    ("-wW" "Suppress developer warnings"
-     "-Wno-dev")
-    ("-we" "Make developer warnings errors"
-     "-Werror=dev")
-    ("-wE" "Make developer warnings not errors"
-     "-Wno-error=dev")
-    ("-wd" "Enable deprecation warnings"
-     "-Wdeprecated")
-    ("-wD" "Suppress deprecation warnings"
-     "-Wno-deprecated")
-    ("-wm" "Make deprecated macro and function warnings errors"
-     "-Werror=deprecated")
-    ("-wM" "Make deprecated macro and function warnings not errors"
-     "-Wno-error=deprecated")]
-    ["Debug"
-     ("-cli" "Don't warn about command line options"
-      "--no-warn-unused-cli")
-     ("-csv" "Find problems with variable usage in system files"
-      "--check-system-vars")
-     ("-cne" "Compile no warnings as error"
-      "--compile-no-warning-as-error")
-     ("-lc" " Prepend log messages with context, if given"
-      "--log-context")
-     ("-dt" " Do not delete the try_compile build tree"
-      "--debug-trycompile")
-     ("-do" " Put cmake in a debug mode"
-      "--debug-output")
-     ("-df" " Put cmake find in a debug mode"
-      "--debug-find")
-     ("dfp" " Limit cmake debug-find to the comma-separated list of packages"
-      "--debug-find-pkg="
-      :prompt "Packages (comma separated): ")
-     ("dfv" " Limit cmake debug-find to the comma-separated list of result variables"
-      "--debug-find-var="
-      :prompt "Variables (comma separated): ")
-     ("dsi" " Dump information about this system"
-      "--system-information="
-      :prompt "Select system dump file: "
-      :reader transient-read-file)]]
-  [["Trace"
+    ("-ww" "Enable developer warnings" "-Wdev")
+    ("-wW" "Suppress developer warnings" "-Wno-dev")
+    ("-wd" "Enable deprecation warnings" "-Wdeprecated")
+    ("-wD" "Suppress deprecation warnings" "-Wno-deprecated")
+    ("-we" "Make developer warnings errors" "-Werror=dev")
+    ("-wE" "Make developer warnings not errors" "-Wno-error=dev")
+    ("-wm" "Make deprecated macro and function warnings errors"  "-Werror=deprecated")
+    ("-wM" "Make deprecated macro and function warnings not errors" "-Wno-error=deprecated")
+    ]
+   [5 "Debug"
+    ("-cli" "Don't warn about command line options"
+     "--no-warn-unused-cli")
+    ("-csv" "Find problems with variable usage in system files"
+     "--check-system-vars")
+    ("-cne" "Compile no warnings as error"
+     "--compile-no-warning-as-error")
+    ("-lc" " Prepend log messages with context, if given"
+     "--log-context")
+    ("-dt" " Do not delete the try_compile build tree"
+     "--debug-trycompile")
+    ("-do" " Put cmake in a debug mode"
+     "--debug-output")
+    ("-df" " Put cmake find in a debug mode"
+     "--debug-find")
+    ("dfp" " Limit cmake debug-find to the comma-separated list of packages"
+     "--debug-find-pkg="
+     :prompt "Packages (comma separated): ")
+    ("dfv" " Limit cmake debug-find to the comma-separated list of result variables"
+     "--debug-find-var="
+     :prompt "Variables (comma separated): ")
+    ("dsi" " Dump information about this system"
+     "--system-information="
+     :prompt "Select system dump file: "
+     :reader transient-read-file)]]
+  [
+   [6 "Trace"
     ("-trm" "Put cmake in trace mode" "--trace")
     ("-tre" "Put cmake in trace mode with variable expansion"
      "--trace-expand")
@@ -316,39 +315,38 @@ Use current configure preset as base for preset specific expansions."
      "--trace-redirect="
      :prompt "Trace output: "
      :reader transient-read-file)]
-   ["Misc"
-    ("-f" "Configure a fresh build tree, removing any existing cache file"
-     "--fresh")
-    ("-n" "View mode only" "-N")
-    ("-u" "Warn about uninitialized values"
-     "--warn-uninitialized")
-    ("l" " Set the verbosity of message from CMake files."
-     "--log-level="
-     :prompt "Select log level: "
-     :choices ("ERROR" "WARNING" "NOTICE" "STATUS" "VERBOSE" "DEBUG" "TRACE"))]
-   ]
-  ["Profiling"
-   ("pf" "Output format for profiling CMake scripts"
-    "--profiling-format="
-    :prompt "Select format: "
-    :choices ("google-trace"))
-   ("po" "Select an output path for the profiling data"
-    "--profiling-output="
-    :prompt "Select profiling output: "
-    :reader transient-read-file)]
+   [6 "Profiling"
+    ("pf" "Output format for profiling CMake scripts"
+     "--profiling-format="
+     :prompt "Select format: "
+     :choices ("google-trace"))
+    ("po" "Select an output path for the profiling data"
+     "--profiling-output="
+     :prompt "Select profiling output: "
+     :reader transient-read-file)]]
+  ["Misc"
+   ("-f" "Configure a fresh build tree, removing any existing cache file"
+    "--fresh")
+   ("-n" "View mode only" "-N")
+   ("-u" "Warn about uninitialized values"
+    "--warn-uninitialized")
+   ("l" " Set the verbosity of message from CMake files."
+    "--log-level="
+    :prompt "Select log level: "
+    :choices ("ERROR" "WARNING" "NOTICE" "STATUS" "VERBOSE" "DEBUG" "TRACE"))]
   [["Do"
-    ("xx" "Execute current" teamake-configure--do-configure :transient t)
-    ("xp" "Execute preset" teamake-configure--select-and-execute-preset :transient t)
+    ("xx" "Execute current" teamake-configure--do-configure)
+    ("xp" "Execute preset" teamake-configure--select-and-execute-preset)
     ("xb" teamake-configure--build-menu :transient t)]
    ["Manage"
     ("xsc" "Save" teamake-configure--save-current :transient t)
     ("xsa" "Save as" teamake-configure--save-current-as :transient t)
     ("xl" " Load" teamake-configure--load)]]
   (interactive
-   (let ((project-root (teamake--find-root default-directory "CMakeLists.txt"))
+   (let ((source-dir (teamake--find-root default-directory "CMakeLists.txt"))
          (no-project (list :name "No CMake project" :source-dir default-directory)))
-     (list (if project-root (teamake--project-from-path project-root)
-             no-project))))
+     (list (teamake--project-from-path-or-default source-dir no-project))))
+
   (teamake-setup-transient 'teamake-configure project))
 
 

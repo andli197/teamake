@@ -1,7 +1,5 @@
 ;;; teamake --- Setup for whole of teamake
-;;;
 ;;; Commentary:
-;;;
 ;;; Code:
 
 (require 'teamake-core)
@@ -11,6 +9,7 @@
 (require 'teamake-preset)
 (require 'teamake-configure)
 (require 'teamake-build)
+(require 'teamake-install)
 (require 'teamake-test)
 (require 'teamake-package)
 

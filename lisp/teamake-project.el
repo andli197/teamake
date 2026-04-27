@@ -6,6 +6,7 @@
 (require 'teamake-core)
 (require 'teamake-configure)
 (require 'teamake-build)
+(require 'teamake-install)
 (require 'teamake-preset)
 
 ;; Display and select project
@@ -79,7 +80,7 @@ configuration values."
           (list (cons "${project}" (plist-get project :name))
                 (cons "${sourceDir}" (plist-get project :source-dir))
                 (cons "${sourceDirName}" (teamake-project--get-source-dir-name-from-project project))
-                (cons "${sourceParentDir}" (teamake-project--get-parent-dir-from-project project)) ;; Should not end with /!!!!
+                (cons "${sourceParentDir}" (teamake-project--get-parent-dir-from-project project))
                 (cons "${hostSystemName}" (teamake-project--host-system-name))
                 ;; (cons "${presetName}" (teamake-project--preset-name project))
                 (cons "${generator}" (teamake-project--get-current-configured-generator project))
@@ -114,7 +115,8 @@ configuration values."
         (let* ((variable (match-string 0 replaced))
                (match (assoc variable variables 'string=)))
           (unless match
-            (user-error "Found variable expression '%s' in '%s' but was unable to match it in current project" variable str))
+            (user-error "Found variable expression '%s' in '%s' but was unable to match it in current project"
+                        variable str))
           
           (setq replaced (string-replace variable (cdr match) replaced)))))
     replaced))
@@ -123,79 +125,40 @@ configuration values."
   (or (plist-get project :name)
       "Unnamed project"))
 
-(defun teamake-project--get-name-from-scope ()
-  "Return name from project in current transient scope."
-  (teamake-project--get-name-from-project (transient-scope)))
-
 (transient-define-suffix teamake-project--project-name ()
   :transient 'transient--do-recurse
   :description
   (lambda () (format "Project name (%s)"
-                     (propertize (teamake-project--get-name-from-scope)
-                                 'face 'transient-value)))
+                     (propertize
+                      (teamake-project--get-name-from-project (transient-scope))
+                      'face 'transient-value)))
   (interactive)
-  (let ((scope (transient-scope)))
-    (plist-put scope :name
-               (read-string "Name: " (teamake-project--get-name-from-project scope)))
-    (transient-setup transient-current-command '() '() :scope scope)))
-
-(defun teamake-project--get-source-dir-from-project (project)
-  (or (plist-get project :source-dir)
-      default-directory))
-
-(defun teamake-project--get-source-dir-from-scope ()
-  (teamake-project--get-source-dir-from-project (transient-scope)))
+  (let* ((project (transient-scope))
+         (name (read-string "Name: " (teamake-project--get-name-from-project project))))
+    (plist-put project :name name)
+    (transient-setup 'teamake-project '() '() :scope project)))
 
 (transient-define-suffix teamake-project--project-source-dir ()
   :transient 'transient--do-recurse
   :description
   (lambda () (format "Source dir (%s)"
-                     (propertize (teamake-project--get-source-dir-from-scope)
-                                 'face 'transient-value)))
+                     (propertize
+                      (plist-get (transient-scope) :source-dir)
+                      'face 'transient-value)))
   (interactive)
-  (let ((scope (transient-scope)))
-    (plist-put scope :source-dir (read-directory-name "Source dir: " (plist-get scope :source-dir)))
-    (transient-setup transient-current-command '() '() :scope scope)))
+  (let* ((project (transient-scope))
+         (source-dir (teamake--select-source-dir (plist-get project :source-dir))))
+    (plist-put project :source-dir source-dir)
+    (transient-setup 'teamake-project '() '() :scope project)))
 
-;; (defun teamake-project--get-build-dir-from-project (project)
-;;   (or (plist-get project :build-dir)
-;;       default-directory))
-
-;; (defun teamake-project--get-build-dir-from-scope ()
-;;   (teamake-project--get-build-dir-from-project (transient-scope)))
-
-;; (transient-define-suffix teamake-project--project-build-dir ()
-;;   :transient 'transient--do-recurse
-;;   :description
-;;   (lambda ()
-;;     (format "Build dir (%s)"
-;;                      (propertize (teamake-project--get-build-dir-from-scope)
-;;                                  'face 'transient-value)))
-;;   (interactive)
-;;   (let* ((scope (transient-scope))
-;;          (prev (plist-get scope :build-dir)))
-;;     (plist-put scope :build-dir
-;;                (read-directory-name "Build dir: " prev))
-;;     (transient-setup transient-current-command '() '() :scope scope)))
-
-
-;; (defun teamake-project--get-install-dir-from-project (project)
-;;   (or (plist-get project :install-dir)
-;;       default-directory))
-
-;; (defun teamake-project--get-install-dir-from-scope ()
-;;   (teamake-project--get-install-dir-from-project (transient-scope)))
-
-;; (transient-define-suffix teamake-project--project-install-dir ()
-;;   :transient 'transient--do-recurse
-;;   :description
-;;   (lambda () (format "Install dir (%s)"
-;;                      (propertize (teamake-project--get-install-dir-from-scope)
-;;                                  'face 'transient-value)))
-;;   (interactive)
-;;   (let ((scope (transient-scope)))
-;;     (plist-put scope :install-dir (read-directory-name "Install dir: " (plist-get scope :install-dir)))
-;;     (transient-setup transient-current-command '() '() :scope scope)))
+(transient-define-suffix teamake-project--visit-source-dir ()
+  :description
+  (lambda () (format "Visit %s"
+                     (propertize
+                      (plist-get (transient-scope) :source-dir)
+                      'face 'transient-value)))
+  (interactive)
+  (dired (plist-get (transient-scope) :source-dir)))
 
 (defun teamake-project--unique-human-readable (project)
   "Display the PROJECT plist."
@@ -231,7 +194,7 @@ configuration values."
       (progn
         (push project teamake-project-configurations)
         (message "Project %s added!" project-display))))
-  (teamake-project--write-project-configurations))
+  (teamake-save-project-configurations))
 
 (transient-define-suffix teamake-project--load-project ()
   "Show a list of all known projects and prompt for one to select."
@@ -266,31 +229,42 @@ configuration values."
            (lambda (p)
              (teamake-project--matching-project-p p project))
            teamake-project-configurations)))
-  (teamake-project--write-project-configurations))
+  (teamake-save-project-configurations))
 
 (transient-define-suffix teamake-project--teamake-configure ()
   :description "Configure"
   :transient 'transient--do-recurse
+  :if (lambda () (teamake-configure--possible (transient-scope)))
   (interactive)
-  (teamake-setup-transient 'teamake-configure (transient-scope)))
+  (teamake-configure--setup (transient-scope)))
 
 (transient-define-suffix teamake-project--teamake-build ()
   :description "Build"
   :transient 'transient--do-recurse
-  :if (lambda () (teamake-get-current-values 'teamake-build (transient-scope)))
+  :if (lambda () (teamake-build--possible (transient-scope)))
   (interactive)
-  (let* ((project (transient-scope))
-         (current-values (teamake-get-current-values 'teamake-build project)))
-    (if current-values
-        (transient-setup 'teamake-build '() '()
-                         :scope (plist-get current-values :scope)
-                         :value (plist-get current-values :value)))))
+  (teamake-build--setup (transient-scope)))
+
+(transient-define-suffix teamake-project--teamake-install ()
+  :description "Install"
+  :transient 'transient--do-recurse
+  :if (lambda () (teamake-install--possible (transient-scope)))
+  (interactive)
+  (teamake-install--setup (transient-scope)))
+
+(transient-define-suffix teamake-project--teamake-test ()
+  :description "Test"
+  :transient 'transient--do-recurse
+  :if (lambda () (teamake-test--possible (transient-scope)))
+  (interactive)
+  (teamake-test--setup (transient-scope)))
 
 (transient-define-suffix teamake-project--teamake-preset ()
   :description "Preset"
   :transient 'transient--do-recurse
+  :if (lambda () (teamake-preset--possible (transient-scope)))
   (interactive)
-  (teamake-setup-transient 'teamake-preset (transient-scope)))
+  (teamake-preset--setup (transient-scope)))
 
 (defun teamake-project--read-project-name-from-cmakelists (source-dir)
   "Read project name from CMakeLists.txt located in SOURCE-DIR."
@@ -321,19 +295,24 @@ configuration values."
   [:if
    (lambda () (transient-scope))
    "Project configuration"
-   ("n" teamake-project--project-name)
-   ("s" teamake-project--project-source-dir)
+   ("pn" teamake-project--project-name)
+   ("ps" teamake-project--project-source-dir)
+   ("pd" teamake-project--visit-source-dir)
    ]
   [:if
    (lambda () (transient-scope))
    :description "CMake"
-   ("c" teamake-project--teamake-configure)
-   ("b" teamake-project--teamake-build)
-   ("p" teamake-project--teamake-preset)
-   ;; ("t" teamake-project--teamake-test)
-   ;; ("p" teamake-project--teamake-package)
+   ("cc" teamake-project--teamake-configure)
+   ("cb" teamake-project--teamake-build)
+   ("ci" teamake-project--teamake-install)
+   ("ct" teamake-project--teamake-test)
+   (5 "cp" teamake-project--teamake-preset)
+   ;; ("ca" teamake-project--teamake-package)
+   ;; ("cw" teamake-project--workflow)
    ]
-  ["Project do"
+  ;; ["TEamake"
+  ;;  ("tc" teamake-project--clear-process-buffer)]
+  ["Project"
    ("C" "Create" teamake-project--create-project :transient t)
    ("S" "Save" teamake-project--save-project :transient t)
    ("L" teamake-project--load-project :transient t)

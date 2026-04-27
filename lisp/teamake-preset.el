@@ -1,7 +1,5 @@
 ;;; teamake-preset --- Cmake preset handling for teamake
-;;;
 ;;; Commentary:
-;;;
 ;;; Code:
 
 (require 'json)
@@ -499,9 +497,7 @@ CONFIGURE-PRESET should be provided."
   "Return current CATEGORY from PROJECT."
   (interactive)
   (let ((presets (teamake-get-current-values 'teamake-preset project)))
-    (message "(plist-get presets category)=%s" (plist-get presets category))
-    (plist-get presets category)
-    ))
+    (plist-get presets category)))
 
 (defun teamake-preset--set-current (project category preset)
   "Set current CATEGORY in PROJECT to PRESET."
@@ -550,6 +546,7 @@ CONFIGURE-PRESET should be provided."
 (defun teamake-preset-select-configuration (project)
   "Select a CMake configuration preset from PROJECT."
   (interactive)
+  ;; save presets in project???????? Needs some thinking, due to cache invalidation
   (let ((preset (teamake-preset-select-configuration-preset-from-path
                  (plist-get project :source-dir)))
         (current-presets (teamake-get-current-values 'teamake-preset project)))
@@ -576,7 +573,6 @@ CONFIGURE-PRESET should be provided."
 
 (defun teamake-preset-select-configuration-preset-from-path (source-path)
   "Read all configuration presets from SOURCE-PATH and preset to user."
-  ;; save presets in project???????? Needs some thinking, due to cache invalidation
   (let* ((presets (teamake-preset-parse-presets source-path))
          (user-selectable-presets
           (teamake-preset--get-user-selectable-configure-presets presets))
@@ -659,6 +655,14 @@ CONFIGURE-PRESET should be provided."
     (transient-setup transient-current-command '() '() :scope project)))
 
 
+(defun teamake-preset--possible (project)
+  "Determine if PROJECT contain enough information for `teamake-preset'."
+  t)
+
+(defun teamake-preset--setup (project)
+  "Setup `teamake-preset' from PROJECT."
+  (teamake-setup-transient 'teamake-preset project))
+
 (transient-define-prefix teamake-preset (project)
   "Handle cmake presets for PROJECT."
   [:description
@@ -680,7 +684,7 @@ CONFIGURE-PRESET should be provided."
    ]
   (interactive (list (teamake-project-get-project-from-path
                       (teamake--find-root default-directory "CMakeLists.txt"))))
-  (transient-setup 'teamake-preset '() '() :scope project)
+  (teamake-preset--setup project)
   )
 
 (provide 'teamake-preset)

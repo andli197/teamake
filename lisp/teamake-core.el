@@ -4,6 +4,12 @@
 
 (require 'transient)
 
+(defconst teamake-version "0.0.1")
+
+;;=========================
+;; Customization and groups
+;;=========================
+
 (defgroup teamake '()
   "CMake integration in Emacs using `transient'."
   :group 'tools)
@@ -49,40 +55,47 @@
   "Face for teamake project path."
   :group 'teamake-faces)
 
-(defcustom teamake-process-preferred-shell
-  shell-file-name
+(defcustom teamake-process-preferred-shell shell-file-name
   "User preferred shell for executing commands in.
 
 Defaults to `shell-file-name'"
-  :type 'string
-  :group 'teamake-process)
+  :package-version '(teamake . "0.0.1")
+  :group 'teamake-process
+  :type 'string)
 
 (defcustom teamake-process-cmake-tool-path
   (locate-file "cmake" exec-path exec-suffixes)
-  "Location of the cmake executable.
+  "Location of the cmake executables.  Used in calls to cmake, ctest, and cpack.
+If available on PATH this needs not to be set."
+  :package-version '(teamake . "0.0.1")
+  :group 'teamake-process
+  :type 'string)
 
-Used in calls to cmake, ctest, cpack, etc."
-  :type 'string
-  :group 'teamake-process)
-
-(defcustom teamake-process-buffer-base-name
-  "TEAMake"
+(defcustom teamake-process-buffer-base-name "TEAMake"
   "Base name of process buffers created by `teamake'."
-  :type 'string
-  :group 'teamake-process)
+  :package-version '(teamake . "0.0.1")
+  :group 'teamake-process
+  :type 'string)
 
 (defcustom teamake-project-configurations-file
   (locate-user-emacs-file "teamake-project-configurations.el")
   "File in which to save all project configurations."
-  :type 'file
-  :group 'teamake-misc)
+  :package-version '(teamake . "0.0.1")
+  :group 'teamake-misc
+  :type 'file)
 
+(defcustom teamake-undetermined-project-name "Undetermined project"
+  "Name to present as project name when no project was available."
+  :package-version '(teamake . "0.0.1")
+  :group 'teamake-misc
+  :type 'string)
+
+;;===================
+;; Project management
+;;===================
 
 (defvar teamake-project-configurations '()
   "Available configured projects to use.")
-
-;; Save and load projects
-;;;;;;;;;;;;;;;;;;;;;;;;;
 
 ;;;###autoload
 (defun teamake-load-project-configurations ()
@@ -158,7 +171,7 @@ file specified by `teamake-project-configurations-file'."
     (teamake-get-save-values transient project))))
 
 (defun teamake-get-save-values (transient project)
-  "Return name of all saved values in PROJECT for TRANSIENT."
+  "Return all saved values in PROJECT for TRANSIENT."
   (alist-get transient (plist-get project :save)))
 
 (defun teamake-get-save-names (transient project)
@@ -236,6 +249,15 @@ can mention PATH in any way for it to be considered a match."
       (teamake--path-matches-p (plist-get (teamake-get-current-values 'teamake-build project) :scope) path)
       (teamake--path-matches-p (teamake-get-current-values 'teamake-configure project) path)))
 
+(defun teamake--project-from-path-or-default (path &optional default)
+  "Return the project associated with PATH or DEFAULT."
+  (or (and path
+           (seq-find
+            (lambda (proj)
+              (teamake--project-contains-p proj (directory-file-name path)))
+            teamake-project-configurations))
+      default))
+
 (defun teamake--project-from-path (path)
   "Return the project associated with PATH.
 
@@ -247,39 +269,26 @@ in any way."
    teamake-project-configurations))
 
 (defun teamake--select-source-dir (&optional initial)
-  "Prompt user for source directory starting at optional INITIAL.
+  "Return a correct CMake source-dir.
 
-Ensure it is a cmake project (containing CMakeLists.txt) and
-make sure the path does not end in directory separator."
-  (let* ((initial (or initial default-directory))
-         (source-dir (read-directory-name "CMake source dir: " initial '() t)))
+If INITIAL is given, check first if that is valid.  If not valid source-dir
+prompt user for input.  A correct source-dir must contain a CMakeLists.txt file."
+  (let ((source-dir (or initial (read-directory-name "CMake source dir: " default-directory '() t))))
     (while (not (teamake--find-root source-dir "CMakeLists.txt"))
       (setq source-dir (read-directory-name
-                         "Invalid CMake project, select new (must contain CMakeLists.txt): " '() '() t)))
+                        "Invalid CMake source dir, select new (must contain CMakeLists.txt): " '() '() t)))
     (directory-file-name source-dir)))
 
 (defun teamake--select-binary-dir (&optional initial)
-  "Prompt user for binary directory starting at optional INITIAL.
+  "Return a correct CMake binary-dir.
 
-Ensure it is a cmake binary dir (containing CMakeCache.txt) and
-make sure the path does not end in directory separator."
-  (let* ((initial (or initial default-directory))
-         (binary-dir (read-directory-name "CMake binary dir: " initial '() t)))
+If INITIAL is given, check first if that is valid.  If not valid binary-dir
+prompt user for input.  A correct binary-dir must contain a CMakeCache.txt file."
+  (let ((binary-dir (or initial (read-directory-name "CMake binary dir: " default-directory '() t))))
     (while (not (teamake--find-root binary-dir "CMakeCache.txt"))
       (setq binary-dir (read-directory-name
-                         "Invalid CMake binary dir, select new (must contain CMakeCache.txt): " '() '() t)))
+                        "Invalid CMake binary dir, select new (must contain CMakeCache.txt): " '() '() t)))
     (directory-file-name binary-dir)))
-
-;; (read-multiple-choice
-;;  "Continue connecting?"
-;;  '((?a "always" "Accept certificate for this and future sessions.")
-;;    (?s "session only" "Accept certificate this session only.")
-;;    (?n "no" "Refuse to use certificate, close connection."))
-;;  "Build a "
-;;  t)
-;; (defun teamake--completing-read (prompt)
-;;   ;; https://www.gnu.org/software/emacs/manual/html_node/elisp/Programmed-Completion.html
-;;   )
 
 (defun teamake-expand-expression (expression source-dir &optional expansion-fn)
   "Find all occurances of type ${NAME} in EXPRESSION and try to expand them."
@@ -292,6 +301,57 @@ make sure the path does not end in directory separator."
           (if (string= expansion-step expression)
               (error "No known definition for '%s' found!" macro))
           (teamake-expand-expression expansion-step source-dir expansion-fn))))))
+
+(defun teamake--get-cmake-tool (&optional tool)
+  "Use the `teamake-process-cmake-tool-path' for locating TOOL.
+
+Locate the TOOL from cmake tool suite (cmake, ctest, cpack)
+using the configured `teamake-process-cmake-tool-path' or
+default configured PATH as a fallback."
+  (if (file-exists-p tool)
+      tool
+    (let* ((program (or tool "cmake"))
+           (location program)
+           (locations exec-path))
+      (add-to-list 'locations (file-name-directory teamake-process-cmake-tool-path))
+      (setq location (locate-file program locations exec-suffixes t))
+      (unless (file-exists-p location)
+        (user-error "Unable to locate program %s" program))
+      location)))
+
+(defun teamake--cmake-version ()
+  "Return version of CMake."
+  (let* ((shell-file-name teamake-process-preferred-shell)
+         (cmd (list (teamake--get-cmake-tool "cmake") "--version"))
+         (output (shell-command-to-string (mapconcat 'shell-quote-argument cmd " "))))
+    (save-match-data
+      (if (string-match "cmake version \\([0-9]+\\).\\([0-9]+\\).\\([0-9]+\\)" output)
+          (list (string-to-number (match-string 1 output))
+                (string-to-number (match-string 2 output))
+                (string-to-number (match-string 3 output)))))))
+
+(defun teamake--version-min (major &optional minor patch)
+  "Return wether the found cmake version is at least the version.
+
+Version is divided into MAJOR, MINOR and PATCH and matched using Emacs
+`version-list-<=' comparision."
+  (let ((minor (or minor 0))
+        (patch (or patch 0))
+        (version (teamake--cmake-version)))
+    (version-list-<= (list major minor patch) version)))
+
+
+;; (read-multiple-choice
+;;  "Continue connecting?"
+;;  '((?a "always" "Accept certificate for this and future sessions.")
+;;    (?s "session only" "Accept certificate this session only.")
+;;    (?n "no" "Refuse to use certificate, close connection."))
+;;  "Build a "
+;;  t)
+;; (defun teamake--completing-read (prompt)
+;;   ;; https://www.gnu.org/software/emacs/manual/html_node/elisp/Programmed-Completion.html
+;;   )
+
 
 (provide 'teamake-core)
 ;;; teamake-core.el ends here
