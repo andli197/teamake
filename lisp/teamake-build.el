@@ -55,27 +55,12 @@
       (teamake-build--build-path-matches-p
        (teamake-get-current-values 'teamake-configure project) binary-dir)))
 
-(defun teamake-build--read-build-targets (build-path)
-  "Read available build targets from BUILD-PATH.
-
-Assuming the generator can provide available targets using the 'help'
-target in the build tree."
-  (let ((targets '()))
-    (seq-do
-     (lambda (line)
-       (save-match-data
-         (if (string-match "\\(.+\\):.*" line)
-             (add-to-list 'targets (match-string 1 line)))))
-     (apply #'teamake-cmake-command-to-lines
-            (list "--build" build-path "--target help")))
-    targets))
-
 (transient-define-suffix teamake-build--do-build-current ()
   (interactive)
   (let* ((binary-dir (transient-scope))
          (project (teamake-cmake-cache--project-from-binary-dir binary-dir))
          (values (teamake-get-current-values 'teamake-build project))
-         (expanded-values (teamake-preset-expand-macros-from-project project values)))
+         (expanded-values (teamake-cmake-expand-macros-from-project project values)))
     (apply #'teamake-process-invoke-cmake
            project
            "--build"
@@ -106,6 +91,21 @@ code-tree, or a configured project has a reference to BINARY-DIR."
          (name (teamake-cmake-cache--get-variable-value cache "CMAKE_PROJECT_NAME"))
          (code (teamake-cmake-cache--get-variable-value cache (format "%s_SOURCE_DIR" name))))
     (and code (file-exists-p code) code)))
+
+(defun teamake-build--read-build-targets (build-path)
+  "Read available build targets from BUILD-PATH.
+
+Assuming the generator can provide available targets using the 'help'
+target in the build tree."
+  (let ((targets '()))
+    (seq-do
+     (lambda (line)
+       (save-match-data
+         (if (string-match "\\(.+\\):.*" line)
+             (add-to-list 'targets (match-string 1 line)))))
+     (apply #'teamake-cmake-command-to-lines
+            (list "--build" build-path "--target help")))
+    targets))
 
 (transient-define-suffix teamake-build--build-current ()
   :description "Build current"
