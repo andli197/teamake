@@ -286,7 +286,7 @@ configuration values."
 (transient-define-suffix teamake-project--create-project ()
   "Prompt for path to code of new project."
   (interactive)
-  (let* ((source-dir (teamake--select-source-dir))
+  (let* ((source-dir (teamake-select-source-dir))
          (project (teamake-project--new-project source-dir)))
     (add-to-list 'teamake-project-configurations project)
     (transient-setup 'teamake-project '() '() :scope project)))
