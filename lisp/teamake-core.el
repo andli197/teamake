@@ -90,6 +90,13 @@ If available on PATH this needs not to be set."
   :group 'teamake-misc
   :type 'string)
 
+(defcustom teamake-autosave-new-projects '()
+  "Set to non-nil to autosave newly created projects to file for persistance."
+  :package-version '(teamake . "0.0.1")
+  :group 'teamake-misc
+  :type 'boolean)
+
+
 ;;===================
 ;; Project management
 ;;===================
@@ -124,62 +131,79 @@ file specified by `teamake-project-configurations-file'."
       (pp teamake-project-configurations (current-buffer)))
     (write-region '() '() teamake-project-configurations-file '() 'silent)))
 
-(defun teamake-setup-transient (transient project)
-  "Setup TRANSIENT with values from PROJECT."
-  (interactive)
-  (let ((current (teamake-get-current-values transient project)))
-    (transient-setup transient '() '()
-                     :scope project
-                     :value current)))
+(defun teamake-create-project-from-source-dir (source-dir)
+  "Create a new project from SOURCE-DIR.
 
-(defun teamake-set-current-values (transient project value)
-  "Set current value in PROJECT for TRANSIENT to VALUE."
-  (unless (plist-member project :current)
-    (plist-put project :current '()))
-  (let* ((current (plist-get project :current))
-         (existing (alist-get transient current)))
-    (if existing
-        (setf (alist-get transient current) value)
-      (push (cons transient value) (plist-get project :current)))))
+The created project is added to `teamake-project-configurations' and if
+`teamake-autosave-new-projects' is set all project configurations are
+automatically saved to file, specified by `teamake-project-configurations-file'."
+  (let ((project
+         (list :name (teamake-project-name-from-source-dir source-dir)
+               :source-dir source-dir)))
+    (add-to-list 'teamake-project-configurations project)
+    (if teamake-autosave-new-projects (teamake-save-project-configurations))
+    project))
 
-(transient-define-suffix teamake-get-current-values (transient project)
-  "Get current value in PROJECT for TRANSIENT."
-  (interactive)
-  (alist-get transient (plist-get project :current)))
+(defun teamake-project-from-source-dir (path)
+  "Locate project associated with PATH as source-dir."
+  (seq-find
+   (lambda (p)
+     (teamake--is-same-source-dir-p p path))
+   teamake-project-configurations))
 
+(defun teamake-project-from-binary-dir (path)
+  "Return the project associated with PATH."
+  (seq-find
+   (lambda (proj)
+     (teamake--is-same-binary-dir-p proj path))
+   teamake-project-configurations))
 
-(defun teamake-set-save-values (transient project name values)
-  "Set a save record in PROJECT for TRANSIENT to NAME containing VALUES."
-  (unless (plist-member project :save)
-    (plist-put project :save '()))
-  (let ((pair (cons name values))
-        (existing (alist-get transient (plist-get project :save))))
-    (if (alist-get name existing '() '() 'string=)
-        (setf (alist-get name existing '() '() 'string=)
-              values)
-      (setf (alist-get transient (plist-get project :save))
-            (if existing
-                (push pair existing)
-            (list pair))))))
+(defun teamake--is-same-dir-p (p1 p2)
+  "Determine if path P1 and P2 are the same."
+  (string= (directory-file-name p1)
+           (directory-file-name p2)))
 
-(defun teamake-get-save-value (transient project name)
-  "Return specific saved value with NAME in PROJECT for TRANSIENT."
-  (cdr
-   (seq-find
-    (lambda (pair)
-      (string= (car pair) name))
-    (teamake-get-save-values transient project))))
+(defun teamake--is-same-source-dir-p (project source-dir)
+  "Determine if PROJECT :source-dir matches SOURCE-DIR."
+  (teamake--is-same-dir-p (plist-get project :source-dir) source-dir))
 
-(defun teamake-get-save-values (transient project)
-  "Return all saved values in PROJECT for TRANSIENT."
-  (alist-get transient (plist-get project :save)))
+(defun teamake--is-same-binary-dir-p (project binary-dir)
+  "Determine if PROJECT :source-dir matches BINARY-DIR."
+  (teamake--is-same-dir-p (plist-get project :binary-dir) binary-dir))
 
-(defun teamake-get-save-names (transient project)
-  "Return name of all saved values in PROJECT for TRANSIENT."
-  (interactive)
-  (seq-map (lambda (s)
-             (car s))
-           (teamake-get-save-values transient project)))
+(defun teamake-get-or-create-project-from-source-dir (path)
+  "Fetch the project associated with PATH or create one.
+
+PATH must be from within the code tree, otherwise return nil."
+  (interactive (teamake-select-source-dir))
+  (let ((source-dir (teamake--find-root path "CMakeLists.txt")))
+    (if source-dir
+        (let ((project (teamake-project-from-source-dir path)))
+          (unless project
+            (setq project (teamake-create-project-from-source-dir source-dir)))
+          project))))
+
+(defalias 'teamake-project-from-source-dir-or-create 'teamake-get-or-create-project-from-source-dir)
+
+(defun teamake-project-heading (project text)
+  "Return a propertized PROJECT heading with TEXT.
+
+Project name, source dir and binary dir are also shown."
+  (concat (format "%s %s\n"
+                  (propertize text 'face 'teamake-heading)
+                  (propertize
+                   (or (plist-get project :name) teamake-undetermined-project-name)
+                   'face 'teamake-project-name))
+          (if (plist-member project :source-dir) (format "  source-dir: %s\n"
+                                                     (propertize (plist-get project :source-dir)
+                                                                 'face 'teamake-path)))
+          (if (plist-member project :binary-dir) (format "  binary-dir: %s\n"
+                                                     (propertize (plist-get project :binary-dir)
+                                                                 'face 'teamake-path)))))
+
+;;===========================
+;; CMake directories handling
+;;===========================
 
 (defun teamake--find-root (path filename)
   "Look for the dominating FILENAME in PATH.
@@ -200,6 +224,137 @@ then look for FILENAME files in parent directories."
         (directory-file-name topmost-directory)
       '())))
 
+(defun teamake-select-source-dir (&optional initial)
+  "Return a correct CMake source-dir.
+
+If INITIAL is given, check first if that is valid.  If not valid source-dir
+prompt user for input.  A correct source-dir must contain a CMakeLists.txt file."
+  (interactive)
+  (let ((source-dir (or initial (read-directory-name "CMake source dir: " default-directory '() t))))
+    (while (not (teamake--find-root source-dir "CMakeLists.txt"))
+      (setq source-dir (read-directory-name
+                        "Invalid CMake source dir, select new (must contain CMakeLists.txt): " '() '() t)))
+    (directory-file-name source-dir)))
+
+(defun teamake-select-binary-dir (&optional initial)
+  "Return a correct CMake binary-dir.
+
+If INITIAL is given, check first if that is valid.  If not valid binary-dir
+prompt user for input.  A correct binary-dir must contain a CMakeCache.txt file."
+  (interactive)
+  (let ((binary-dir (or initial (read-directory-name "CMake binary dir: " default-directory '() t))))
+    (while (not (teamake--find-root binary-dir "CMakeCache.txt"))
+      (setq binary-dir (read-directory-name
+                        "Invalid CMake binary dir, select new (must contain CMakeCache.txt): " '() '() t)))
+    (directory-file-name binary-dir)))
+
+;;===========================================
+;; Transient and current/save values handling
+;;===========================================
+(defun teamake-setup-transient (transient project)
+  "Setup TRANSIENT with current values from PROJECT."
+  (transient-setup transient '() '()
+                   :scope project
+                   :value (teamake-get-current-values transient project)))
+
+(defun teamake-get-current-values (transient project)
+  "Get current value in PROJECT for TRANSIENT."
+  (alist-get transient (plist-get project :current)))
+
+(defun teamake-set-current-values (transient project value)
+  "Set current value in PROJECT for TRANSIENT to VALUE."
+  (unless (plist-member project :current)
+    (plist-put project :current '()))
+  (let* ((current (plist-get project :current))
+         (existing (alist-get transient current)))
+    (if existing
+        (setf (alist-get transient current) value)
+      (push (cons transient value) (plist-get project :current)))))
+
+(defun teamake-get-save-value (transient project name)
+  "Return specific saved value with NAME in PROJECT for TRANSIENT."
+  (cdr
+   (seq-find
+    (lambda (pair)
+      (string= (car pair) name))
+    (teamake-get-save-values transient project))))
+
+(defun teamake-get-save-values (transient project)
+  "Return all saved values in PROJECT for TRANSIENT."
+  (alist-get transient (plist-get project :save)))
+
+(defun teamake-get-save-names (transient project)
+  "Return name of all saved values in PROJECT for TRANSIENT."
+  (interactive)
+  (seq-map (lambda (s)
+             (car s))
+           (teamake-get-save-values transient project)))
+
+(defun teamake-set-save-values (transient project name values)
+  "Set a save record in PROJECT for TRANSIENT to NAME containing VALUES."
+  (unless (plist-member project :save)
+    (plist-put project :save '()))
+  (let ((pair (cons name values))
+        (existing (alist-get transient (plist-get project :save))))
+    (if (alist-get name existing '() '() 'string=)
+        (setf (alist-get name existing '() '() 'string=)
+              values)
+      (setf (alist-get transient (plist-get project :save))
+            (if existing
+                (push pair existing)
+              (list pair))))))
+
+(defun teamake-delete-save-value (transient project name)
+  "Remove save record NAME in PROJECT for TRANSIENT."
+  (let* ((save-values (alist-get transient (plist-get project :save)))
+         (to-remove (assoc name save-values 'string=)))
+    (setf (alist-get transient (plist-get project :save))
+          (seq-keep (lambda (pair)
+                      (unless (string= (car pair) (car to-remove))
+                        pair))
+                    save-values))))
+
+(transient-define-suffix teamake-transient-save-current-values ()
+  "Save current values for `transient-current-command' into active project."
+  (interactive)
+  (let* ((project (transient-scope))
+         (values (transient-args transient-current-command)))
+    (teamake-set-current-values transient-current-prefix project values)))
+
+(transient-define-suffix teamake-transient-save-current-as ()
+  "Prompt user for a name to save current values for `transient-current-command'."
+  (interactive)
+  (let* ((project (transient-scope))
+         (values (transient-args transient-current-command))
+         (existing-names (teamake-get-save-names transient-current-command project))
+         (name (completing-read "Name (match will be overwritten): "
+                                existing-names)))
+    (teamake-set-save-values transient-current-command project name values)))
+
+(transient-define-suffix teamake-transient-load ()
+  "Prompt user for selecting among saved settings for `transient-current-command'."
+  (interactive)
+  (let* ((project (transient-scope))
+         (existing-names (teamake-get-save-names transient-current-command project))
+         (name (completing-read "Load: " existing-names '() t))
+         (value (teamake-get-save-value transient-current-command project name)))
+
+    (teamake-set-current-values transient-current-command project value)
+    (teamake-setup-transient transient-current-command project)))
+
+(transient-define-suffix teamake-transient-delete ()
+  "Prompt user for selecting saved settings for `transient-current-command' to delete."
+  :transient 'transient--do-recurse
+  (interactive)
+  (let* ((project (transient-scope))
+         (existing-names (teamake-get-save-names transient-current-command project))
+         (name (completing-read "Delete: " existing-names '() t)))
+    (teamake-delete-save-value transient-current-command project name))
+  )
+
+;;=======================
+;; Misc utility functions
+;;=======================
 (defun teamake-directory-name (path)
   "Return the directory name of the PATH."
   (let* ((source-parent-dir (file-name-directory (directory-file-name path))))
@@ -228,67 +383,6 @@ then look for FILENAME files in parent directories."
         ((string= text "${hostSystemName}")
          (teamake-host-system-name))
         (t text)))
-
-(defun teamake--path-matches-p (val path)
-  "Determine if any of the VAL match for PATH.
-
-VAL can be either a single argument or a list of arguments."
-  (cond ((stringp val) (string-match val path))
-        ((listp val) (> (seq-count (lambda (item) (string-match item path)) val) 0))
-        (t '())))
-
-(defun teamake--project-contains-p (project path)
-  "Determine if PROJECT is matching PATH.
-
-Either the PROJECT :source-dir,
-or current `teamake-build' ,
-or current `teamake-configure'
-can mention PATH in any way for it to be considered a match."
-  (or (string= (directory-file-name (plist-get project :source-dir))
-               (directory-file-name path))
-      (teamake--path-matches-p (plist-get (teamake-get-current-values 'teamake-build project) :scope) path)
-      (teamake--path-matches-p (teamake-get-current-values 'teamake-configure project) path)))
-
-(defun teamake--project-from-path-or-default (path &optional default)
-  "Return the project associated with PATH or DEFAULT."
-  (or (and path
-           (seq-find
-            (lambda (proj)
-              (teamake--project-contains-p proj (directory-file-name path)))
-            teamake-project-configurations))
-      default))
-
-(defun teamake--project-from-path (path)
-  "Return the project associated with PATH.
-
-Check if any configured project have a setting pointing out PATH exactly
-in any way."
-  (seq-find
-   (lambda (proj)
-     (teamake--project-contains-p proj (directory-file-name path)))
-   teamake-project-configurations))
-
-(defun teamake--select-source-dir (&optional initial)
-  "Return a correct CMake source-dir.
-
-If INITIAL is given, check first if that is valid.  If not valid source-dir
-prompt user for input.  A correct source-dir must contain a CMakeLists.txt file."
-  (let ((source-dir (or initial (read-directory-name "CMake source dir: " default-directory '() t))))
-    (while (not (teamake--find-root source-dir "CMakeLists.txt"))
-      (setq source-dir (read-directory-name
-                        "Invalid CMake source dir, select new (must contain CMakeLists.txt): " '() '() t)))
-    (directory-file-name source-dir)))
-
-(defun teamake--select-binary-dir (&optional initial)
-  "Return a correct CMake binary-dir.
-
-If INITIAL is given, check first if that is valid.  If not valid binary-dir
-prompt user for input.  A correct binary-dir must contain a CMakeCache.txt file."
-  (let ((binary-dir (or initial (read-directory-name "CMake binary dir: " default-directory '() t))))
-    (while (not (teamake--find-root binary-dir "CMakeCache.txt"))
-      (setq binary-dir (read-directory-name
-                        "Invalid CMake binary dir, select new (must contain CMakeCache.txt): " '() '() t)))
-    (directory-file-name binary-dir)))
 
 (defun teamake-expand-expression (expression source-dir &optional expansion-fn)
   "Find all occurances of type ${NAME} in EXPRESSION and try to expand them."
@@ -351,7 +445,6 @@ Version is divided into MAJOR, MINOR and PATCH and matched using Emacs
 ;; (defun teamake--completing-read (prompt)
 ;;   ;; https://www.gnu.org/software/emacs/manual/html_node/elisp/Programmed-Completion.html
 ;;   )
-
 
 (provide 'teamake-core)
 ;;; teamake-core.el ends here

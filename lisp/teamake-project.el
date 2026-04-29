@@ -3,6 +3,7 @@
 ;;; Code:
 
 (require 'transient)
+(require 'teamake-cmake)
 (require 'teamake-core)
 (require 'teamake-configure)
 (require 'teamake-build)
@@ -151,14 +152,24 @@ configuration values."
     (plist-put project :source-dir source-dir)
     (transient-setup 'teamake-project '() '() :scope project)))
 
+
 (transient-define-suffix teamake-project--visit-source-dir ()
+  :if (lambda () (plist-get (transient-scope) :source-dir))
   :description
-  (lambda () (format "Visit %s"
-                     (propertize
-                      (plist-get (transient-scope) :source-dir)
-                      'face 'transient-value)))
+  (lambda () (format "Visit source-dir (%s)"
+                     (propertize (plist-get (transient-scope) :source-dir)
+                                 'face 'teamake-path)))
   (interactive)
   (dired (plist-get (transient-scope) :source-dir)))
+
+(transient-define-suffix teamake-project--visit-binary-dir ()
+  :if (lambda () (plist-get (transient-scope) :binary-dir))
+  :description
+  (lambda () (format "Visit binary-dir (%s)"
+                     (propertize (plist-get (transient-scope) :binary-dir)
+                                 'face 'teamake-path)))
+  (interactive)
+  (dired (plist-get (transient-scope) :binary-dir)))
 
 (defun teamake-project--unique-human-readable (project)
   "Display the PROJECT plist."
@@ -266,16 +277,6 @@ configuration values."
   (interactive)
   (teamake-preset--setup (transient-scope)))
 
-(defun teamake-project--read-project-name-from-cmakelists (source-dir)
-  "Read project name from CMakeLists.txt located in SOURCE-DIR."
-  (let* ((cmake-lists (file-name-concat source-dir "CMakeLists.txt"))
-         (contents (with-temp-buffer
-                     (insert-file-contents cmake-lists)
-                     (buffer-string))))
-    (save-match-data
-      (if (string-match "project(\\(.+\\))" contents)
-          (car (split-string (match-string 1 contents) " "))))))
-
 (defun teamake-project--new-project (source-dir)
   "Create new project from SOURCE-DIR."
   (list :name (or (teamake-project--read-project-name-from-cmakelists source-dir)
@@ -297,7 +298,17 @@ configuration values."
    "Project configuration"
    ("pn" teamake-project--project-name)
    ("ps" teamake-project--project-source-dir)
-   ("pd" teamake-project--visit-source-dir)
+   (:info
+    (lambda () (format " Configuration %s"
+                       (propertize (or (plist-get (transient-scope) :configuration)
+                                       "No configuration")
+                                   'face 'transient-value))))
+   ]
+  [:if
+   (lambda () (transient-scope))
+   "Visit"
+   ("vc" teamake-project--visit-source-dir)
+   ("vb" teamake-project--visit-binary-dir)
    ]
   [:if
    (lambda () (transient-scope))
@@ -319,8 +330,14 @@ configuration values."
    ("D" "Delete" teamake-project--delete-project :transient t)
    ]
   (interactive
-   (let ((project-root (teamake--find-root default-directory "CMakeLists.txt")))
-     (list (teamake--project-from-path (or project-root default-directory)))))
+   (list (teamake-get-or-create-project-from-source-dir default-directory)))
+  ;; (interactive
+  ;;  (list (teamake--project-from-source-dir
+  ;;         (or (teamake--find-root default-directory "CMakeLists.txt")
+  ;;             default-directory))))
+         
+   ;; (let ((project-root (teamake--find-root default-directory "CMakeLists.txt")))
+   ;;   (list (teamake--project-from-path (or project-root default-directory)))))
   (transient-setup 'teamake-project '() '() :scope project)
   )
 

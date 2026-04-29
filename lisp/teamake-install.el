@@ -12,15 +12,17 @@
 
 (defun teamake-install--possible (project)
   "Determine if PROJECT contains enough information for setup `teamake-install'."
-  (teamake-get-current-values 'teamake-install project))
+  (plist-get project :binary-dir))
 
 (defun teamake-install--setup (project)
   "Setup `teamake-install' from PROJECT."
   (let ((current-values (teamake-get-current-values 'teamake-install project)))
     (if current-values
         (transient-setup 'teamake-install '() '()
-                         :scope (plist-get current-values :scope)
-                         :value (plist-get current-values :value)))))
+                         :scope (plist-get project :binary-dir)
+                         :value (plist-get current-values :value))
+      (transient-setup 'teamake-install '() '()
+                       :scope (plist-get project :binary-dir)))))
 
 (defun teamake-install--setup-transient-from-path (binary-dir)
   "Setup `teamake-install' transient from BINARY-DIR."
@@ -62,9 +64,9 @@
     (teamake-install-set-current binary-dir value)
     (teamake-install--do-install-current)))
 
-(transient-define-prefix teamake-install (binary-dir)
+(transient-define-prefix teamake-install (project)
   [:description
-   (lambda () (teamake-binary-dir-heading "CMake install" (transient-scope)))
+   (lambda () (teamake-project-binary-dir-heading "CMake install" (transient-scope)))
    ("cfg" "For multi configuration tools" "--config="
     :prompt "Configuration: "
     :choices ("Release" "Debug" "RelWithDebInfo"))
@@ -84,15 +86,20 @@
    ("-v" "Enable verbose output" "--verbose")
    ]
   [["Do"
-    ("xx" teamake-install--install-current)]
+    ("xx" teamake-install--install-current)
+    ("xp" teamake-install--install-preset)
+    ]
    ["Manage"
     ("xsc" "Save" "--save")
     ("xsa" "Save as" "--save-as")
     ("xl" " Load" "--load")]
    ]
   (interactive
-   (list (teamake--select-binary-dir default-directory)))
-  (teamake-install--setup-transient-from-path binary-dir)
+   (let* ((binary-dir (teamake-select-binary-dir default-directory))
+          (source-dir (teamake-cmake-cache--get-source-dir binary-dir)))
+     (list (teamake-project-from-source-dir-or-create source-dir))))
+  (teamake-setup-transient 'teamake-install project)
+
   )
 
 (provide 'teamake-install)

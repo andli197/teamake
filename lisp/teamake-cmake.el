@@ -313,14 +313,29 @@ CONFIGURE-PRESET should be provided."
          (preset (teamake-preset--prompt-selection selectable category)))
     (teamake-preset--fuse preset presets)))
 
+(defun teamake-cmake-select-preset-from-project (project category &optional configure-preset)
+  "Read presets from PROJECT and prompt user selection from CATEGORY.
+
+The preset that can be selected must not be hidden nor condition not met.
+If the CATEGORY is anything other than :configurePresets, the optional argument
+CONFIGURE-PRESET is used to discriminate against a preset not matching that
+:configurePreset.  If all presets of CATEGORY are to be presented, no
+CONFIGURE-PRESET should be provided."
+  ;; TODO: Perhaps cache the presets in project here?
+  (teamake-cmake-select-preset-from-path (plist-get project :source-dir) category configure-preset))
+
+
 (defun teamake-cmake-expand-macros-from-project (project values)
   "In PROJECT expand all macros for VALUES."
   (let ((source-dir (plist-get project :source-dir)))
-    (seq-map (lambda (value) (teamake-expand-expression
-                              value (plist-get project :source-dir)
-                              (lambda (text source-dir)
-                                (teamake-preset--expand-macro text preset source-dir))))
-             values)))
+    (seq-map
+     (lambda (value)
+       (teamake-expand-expression
+        value
+        (plist-get project :source-dir)
+        (lambda (text source-dir)
+          (teamake-preset--expand-macro text preset source-dir))))
+     values)))
 
 (defun teamake-cmake-parse-presets (source-path)
   "Parse presets from SOURCE-PATH."
@@ -330,6 +345,120 @@ CONFIGURE-PRESET should be provided."
         (teamake-preset--parse-file cmake-user-presets-file "CMakePresets.json")
       (teamake-preset--parse-file teamake-presets-file))))
 
+(defun teamake-project--read-project-name-from-cmakelists (source-dir)
+  "Read project name from CMakeLists.txt located in SOURCE-DIR."
+  (let* ((cmake-lists (file-name-concat source-dir "CMakeLists.txt"))
+         (contents (with-temp-buffer
+                     (insert-file-contents cmake-lists)
+                     (buffer-string))))
+    (save-match-data
+      (if (string-match "project(\\(.+\\))" contents)
+          (car (split-string (match-string 1 contents) " "))))))
+
+(defun teamake-project-name-from-source-dir (source-tree)
+  "Deduce project name from CMakeLists.txt from SOURCE-TREE."
+  (let ((source-dir (teamake--find-root source-tree "CMakeLists.txt")))
+    (if source-dir
+        (let* ((cmake-lists (file-name-concat source-dir "CMakeLists.txt"))
+               (contents (with-temp-buffer
+                           (insert-file-contents cmake-lists)
+                           (buffer-string))))
+          (save-match-data
+            (if (string-match "project(\\(.+\\))" contents)
+                (car (split-string (match-string 1 contents) " ")))))
+      teamake-undetermined-project-name)))
+
+
+(defvar teamake-cmake-cache--variable-regexp
+  "^\\([-a-zA-Z0-9_]+\\):?\\([a-zA-Z]?+\\)=\\(.?+\\)"
+  "Regexp for matching cmake cache variable.")
+
+(defun teamake-cmake-cache--parse-variable-line (line)
+  "Parse a CMakeCache line.
+
+If the type is a BOOL the value is converted to ON or OFF
+where the values ON and TRUE in either capitalization or lowercase
+is interpret as ON, all other values are interpret as OFF."
+  (save-match-data
+    (string-match teamake-cmake-cache--variable-regexp line)
+    (let ((name (match-string 1 line))
+          (type (match-string 2 line))
+          (value (match-string 3 line)))
+      (list :name name
+            :type type
+            :value (cond ((string= type "BOOL")
+                          (if (or (string= (upcase value) "ON")
+                                  (string= (upcase value) "TRUE"))
+                              "ON"
+                            "OFF"))
+                         (t value))))))
+
+(defun teamake-cmake-cache--parse-variables (binary-dir)
+  "Parse all options in the form <NAME>(:[TYPE])=<VALUE> from BINARY-DIR.
+
+Return the options as an property list."
+  (let* ((cache-file (file-name-concat binary-dir "CMakeCache.txt"))
+         (contents (and (file-exists-p cache-file)
+                        (with-temp-buffer
+                          (insert-file-contents cache-file)
+                          (buffer-string))))
+         result '())
+    (if contents
+        (seq-do
+         (lambda (line)
+           (if (string-match teamake-cmake-cache--variable-regexp line)
+               (add-to-list 'result (teamake-cmake-cache--parse-variable-line line))))
+         (split-string contents "\n")))
+    result))
+
+(defun teamake-cmake-cache--get-variable-value (parsed-cache name)
+  "Extract the cache object value from PARSED-CACHE with :name NAME."
+  (plist-get (seq-find
+              (lambda (c)
+                (string= (plist-get c :name) name))
+              parsed-cache)
+             :value))
+
+(defun teamake-cmake-cache--project-name-from-cache (cache)
+  "Return the value of cache variable CMAKE_PROJECT_NAME among CACHE."
+  (teamake-cmake-cache--get-variable-value
+   cache "CMAKE_PROJECT_NAME"))
+
+(defun teamake-cmake-cache--source-dir-from-cache (cache cmake-project-name)
+  "Return the value of cache variable <CMAKE-PROJECT-NAME>_SOURCE_DIR among CACHE."
+  (teamake-cmake-cache--get-variable-value
+   cache (format "%s_SOURCE_DIR" cmake-project-name)))
+
+(defun teamake-cmake-cache--get-project-name (binary-dir &optional cache)
+  "Read CMAKE_PROJECT_NAME cache variable from BINARY-DIR."
+  (teamake-cmake-cache--project-name-from-cache
+   (or cache (teamake-cmake-cache--parse-variables binary-dir))))
+
+(defun teamake-cmake-cache--get-source-dir (binary-dir &optional cache)
+  "Read the <PROJECT_NAME>_SOURCE_DIR cache variable from BINARY-DIR."
+  (let ((cache (or cache (teamake-cmake-cache--parse-variables binary-dir))))
+    (teamake-cmake-cache--source-dir-from-cache
+     cache (teamake-cmake-cache--project-name-from-cache cache))))
+
+(defun teamake-cmake-cache--project-from-binary-dir (binary-dir)
+  "Try to read source-dir from BINARY-DIR and fetch project for that."
+  (interactive)
+  (let ((source-dir (teamake-cmake-cache--get-source-dir binary-dir)))
+    (unless source-dir
+      (user-error "'%s' does not seem to be a cmake binary-dir" binary-dir))
+    (teamake-project-from-source-dir source-dir)))
+
+(defun teamake-deduce-project-name (binary-dir)
+  "Deduce name of project from BINARY-DIR.
+
+Search order:
+1. Locate project matching the cache <PROJECT_NAME>_SOURCE_DIR and return :name.
+2. Parse CMAKE_PROJECT_NAME from CMakeCache.txt under BINARY-DIR.
+3. Return `teamake-undetermined-project-name'"
+  (interactive)
+  (or (plist-get (teamake-cmake-cache--project-from-binary-dir binary-dir) :name)
+      (teamake-cmake-cache--get-project-name binary-dir)
+      teamake-undetermined-project-name))
 
 (provide 'teamake-cmake)
 ;;; teamake-cmake.el ends here
