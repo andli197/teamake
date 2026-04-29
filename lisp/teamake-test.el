@@ -34,6 +34,50 @@
      (format "--preset=%s" (plist-get preset :name)))))
 
 
+(defun teamake-test--preset-to-values (preset)
+  "Parse all values from PRESET into values for `teamake-test'."
+  (let ((values '()))
+    (let ((output (plist-get preset :output))
+          (filter (plist-get preset :filter)))
+      (if output
+          (progn
+            (if (eq (plist-get output :shortProgress) t)
+                (add-to-list 'values "--progress"))
+            (if (plist-member output :verbosity)
+                (cond ((string= (plist-get output :verbosity) "verbose") (add-to-list 'values "--verbose"))
+                      ((string= (plist-get output :verbosity) "extra") (add-to-list 'values "--extra-verbose"))))
+            (if (not (eq (plist-get output :debug) :json-false))
+                (add-to-list 'values "--debug"))
+            (if (eq (plist-get output :outputOnFailure) t)
+                (add-to-list 'values "--output-on-failure"))
+            (if (eq (plist-get output :quiet) t)
+                (add-to-list 'values "--quiet"))
+            (if (plist-member output :outputLogFile)
+                (add-to-list 'values (format "--output-log %s" (plist-get output :outputLogFile))))
+            (if (eq (plist-get output :labelSummary) :json-false)
+                (add-to-list 'values "--no-label-summary"))
+            (if (eq (plist-get output :subprojectSummary) :json-false)
+                (add-to-list 'values "--no-subproject-summary"))
+            (if (plist-member output :maxPassedTestOutputSize)
+                (add-to-list 'values (format "--test-output-size-passed %s"
+                                             (plist-get output :maxPassedTestOutputSize))))
+            (if (plist-member output :maxFailedTestOutputSize)
+                (add-to-list 'values (format "--test-output-size-failed %s"
+                                             (plist-get output :maxFailedTestOutputSize))))
+            (if (plist-member output :maxTestNameWidth)
+                (add-to-list 'values (format "--max-width %s"
+                                             (plist-get output :maxTestNameWidth))))
+            ))
+      (if filter
+          (let ((include (plist-get filter :include))
+                (exclude (plist-get filter :exclude)))
+
+            )
+        )
+      )
+    values))
+
+
 (defun teamake-test--expand-macro-in-current-value (value project)
   "Replace any macro expressions in VALUE for PROJECT.
 
@@ -59,10 +103,9 @@ Use current test preset as base for preset specific expansions."
 
 (transient-define-prefix teamake-test (project)
   [:description
-   (lambda () (format "%s %s\n"
-                      (propertize "CTest" 'face 'teamake-heading)
-                      (teamake-project-display-propertized (transient-scope))))
+   (lambda () (teamake-project-heading "CTest" (transient-scope)))
    ["Commands"
+    ("cfg" teamake-transient--configuration)
     ("la" "Run tests with labels matching regular expression"
      "--label-regex="
      :prompt "Labels include regex: ")
@@ -82,7 +125,9 @@ Use current test preset as base for preset specific expansions."
     ("up" "Allow each test to run up to <n> times in order to pass"
      "--repeat until-pass="
      :prompt "Allow repeat: "
-     :reader transient-read-number-N+)]]
+     :reader transient-read-number-N+)
+    ]
+   ]
    ["Options"
     ("-d" "Displaying more verbose internals of CTest"
      "--debug")
@@ -115,26 +160,23 @@ Use current test preset as base for preset specific expansions."
     ("-t" "Set the default test timeout"
      "--timeout="
      :prompt "Time in seconds: "
-     :reader transient-read-number-N+)]
-   [["Do"
+     :reader transient-read-number-N+)
+    ]
+   [
+    ["Do"
      ("xx" "Execute current" teamake-test--do-run-tests)
      ("xp" "Execute preset" teamake-test--select-and-execute-preset)
      ]
     ["Manage"
      ("xsc" "Save" "--xsc")
      ("xsa" "Save as" "--xsa")
-     ("xl" " Load" "--xl")]
+     ("xl" " Load" "--xl")
+     ]
     ]
    (interactive
     (let* ((binary-dir (teamake-select-binary-dir default-directory))
            (source-dir (teamake-cmake-cache--get-source-dir binary-dir)))
       (list (teamake-project-from-source-dir-or-create source-dir))))
-   
-   ;; (interactive
-   ;;  (let ((source-dir (teamake--find-root default-directory "CMakeLists.txt"))
-   ;;        (no-project (list :name "No CMake project" :source-dir default-directory)))
-   ;;    (list (if source-dir (teamake--project-from-path source-dir)
-   ;;            no-project))))
    (teamake-setup-transient 'teamake-test project))
 
 
