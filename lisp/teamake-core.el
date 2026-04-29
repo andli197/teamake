@@ -185,7 +185,7 @@ PATH must be from within the code tree, otherwise return nil."
 
 (defalias 'teamake-project-from-source-dir-or-create 'teamake-get-or-create-project-from-source-dir)
 
-(defun teamake-project-heading (project text)
+(defun teamake-project-heading (text project)
   "Return a propertized PROJECT heading with TEXT.
 
 Project name, source dir and binary dir are also shown."
@@ -355,6 +355,25 @@ prompt user for input.  A correct binary-dir must contain a CMakeCache.txt file.
 ;;=======================
 ;; Misc utility functions
 ;;=======================
+(transient-define-suffix teamake-transient--configuration ()
+  :description
+  (lambda ()
+    (let* ((project (transient-scope))
+           (text "For multi configuration tools")
+           (value (plist-get project :configuration)))
+      (if value
+          (format "%s (%s)"
+                  text
+                  (propertize (format "--config=%s" value) 'face 'transient-value))
+        (format "%s (--config=)" text))))
+  (interactive)
+  (let* ((project (transient-scope))
+         (values (transient-args transient-current-command))
+         (configuration (completing-read "Configuration: " '("Debug" "RelWithDebInfo" "Release") '() t)))
+    (plist-put project :configuration configuration)
+    (teamake-set-current-values transient-current-command project values)
+    (teamake-setup-transient transient-current-command project)))
+
 (defun teamake-directory-name (path)
   "Return the directory name of the PATH."
   (let* ((source-parent-dir (file-name-directory (directory-file-name path))))

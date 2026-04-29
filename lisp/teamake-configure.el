@@ -242,7 +242,7 @@ Use current configure preset as base for preset specific expansions."
 
 (transient-define-prefix teamake-configure (project)
   [:description
-   (lambda () (teamake-project-heading (transient-scope) "CMake Configure"))
+   (lambda () (teamake-project-heading "CMake Configure" (transient-scope)))
    ["Options"
     ("b" teamake-configure--binary-dir)
     (5 "C" "Pre-load a script to populate the cache" "-C"

@@ -66,10 +66,8 @@
 
 (transient-define-prefix teamake-install (project)
   [:description
-   (lambda () (teamake-project-binary-dir-heading "CMake install" (transient-scope)))
-   ("cfg" "For multi configuration tools" "--config="
-    :prompt "Configuration: "
-    :choices ("Release" "Debug" "RelWithDebInfo"))
+   (lambda () (teamake-project-heading "CMake install" (transient-scope)))
+   ("cfg" teamake-transient--configuration)
    ("co" "Component-based install. Only install component" "--component="
     :prompt "Component: ")
    ("pe" "Default directory install permissions" "--default-directory-permissions"
@@ -87,7 +85,7 @@
    ]
   [["Do"
     ("xx" teamake-install--install-current)
-    ("xp" teamake-install--install-preset)
+    ;; ("xp" teamake-install--install-preset)
     ]
    ["Manage"
     ("xsc" "Save" "--save")

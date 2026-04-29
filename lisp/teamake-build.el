@@ -99,26 +99,6 @@ target in the build tree."
     (teamake-preset-select-from-project project :buildPresets)
     (teamake-build--do-build-preset)))
 
-(transient-define-suffix teamake-binary-dir--configuration ()
-  :description
-  (lambda ()
-    (let* ((project (transient-scope))
-           (text "For multi configuration tools")
-           (value (plist-get project :configuration)))
-      (if value
-          (format "%s (%s)"
-                  text
-                  (propertize (format "--config=%s" value) 'face 'transient-value))
-        (format "%s (--config=)" text))))
-  (interactive)
-  (let* ((project (transient-scope))
-         (values (transient-args transient-current-command))
-         (configuration (completing-read "Configuration: " '("Debug" "RelWithDebInfo" "Release") '() t)))
-    (plist-put project :configuration configuration)
-    (teamake-set-current-values transient-current-command project values)
-    (teamake-setup-transient transient-current-command project)))
-  
-  
 (transient-define-suffix teamake-build--save-current ()
   "Save current build settings."
   (interactive)
@@ -151,7 +131,7 @@ target in the build tree."
 ;;;###autoload
 (transient-define-prefix teamake-build (project)
   [:description
-   (lambda () (teamake-project-heading (transient-scope) "CMake build"))
+   (lambda () (teamake-project-heading "CMake build" (transient-scope)))
   ["Flags"
    ("-c" "Build target 'clean' first, then build actual target" "--clean-first")
    ("-v" "Verbose output" "--verbose")]
@@ -170,7 +150,7 @@ target in the build tree."
    ;;  :prompt "Configuration: "
    ;;  :choices ("Release" "Debug" "RelWithDebInfo"))
 
-   ("C" teamake-binary-dir--configuration)
+   ("cfg" teamake-transient--configuration)
 
    ("r" "Restore/resolve package references during build"
     "--resolve-package-references="
