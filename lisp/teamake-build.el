@@ -8,6 +8,23 @@
 (require 'teamake-preset)
 (require 'teamake-process)
 
+(defun teamake-build--read-build-targets (project)
+  "Read available build targets from PROJECT.
+
+Assuming the generator can provide available targets using the 'help'
+target in the binary dir."
+  (unless (plist-member project :binary-dir)
+    (user-error "Unable to read build targets since no binary dir specified"))
+  (let ((targets '()))
+    (seq-do
+     (lambda (line)
+       (save-match-data
+         (if (string-match "\\(.+\\):.*" line)
+             (add-to-list 'targets (match-string 1 line)))))
+     (apply #'teamake-cmake-command-to-lines
+            (list "--build" (plist-get project :binary-dir) "--target help")))
+    targets))
+
 (defun teamake-build--preset-to-values (preset)
   "Parse all values from current build PRESET."
   (let ((values '()))
@@ -40,87 +57,58 @@
   :description "Read from preset"
   (interactive)
   (let* ((project (transient-scope))
-         (preset (teamake-preset-select-from-project project :buildPresets))
+         (preset (teamake-preset-select-build project))
          (values (teamake-build--preset-to-values preset)))
     (teamake-set-current-values 'teamake-build project values)
     (transient-setup 'teamake-build '() '()
-                     :scope binary-dir
+                     :scope project
                      :value values)))
-
-(transient-define-suffix teamake-build--do-build-current ()
-  (interactive)
-  (let* ((project (transient-scope))
-         (values (teamake-get-current-values 'teamake-build project))
-         (expanded-values (teamake-cmake-expand-macros-from-project project values)))
-    (apply #'teamake-process-invoke-cmake
-           project
-           "--build"
-           binary-dir
-           expanded-values)))
-
-(transient-define-suffix teamake-build--do-build-preset ()
-  (interactive)
-  (let* ((project (transient-scope))
-         (preset (teamake-preset--get-current project :buildPresets)))
-    (teamake-process-invoke-cmake project
-                                  "--build"
-                                  (format "--preset=%s" (plist-get preset :name))
-                                  )))
-
-(defun teamake-build--read-build-targets (build-path)
-  "Read available build targets from BUILD-PATH.
-
-Assuming the generator can provide available targets using the 'help'
-target in the build tree."
-  (let ((targets '()))
-    (seq-do
-     (lambda (line)
-       (save-match-data
-         (if (string-match "\\(.+\\):.*" line)
-             (add-to-list 'targets (match-string 1 line)))))
-     (apply #'teamake-cmake-command-to-lines
-            (list "--build" build-path "--target help")))
-    targets))
 
 (transient-define-suffix teamake-build--build-current ()
   :description "Build current"
   (interactive)
-  (let* ((binary-dir (transient-scope))
-         (project (teamake-cmake-cache--project-from-binary-dir binary-dir))
-         (value (transient-args 'teamake-build)))
-    (teamake-set-current-values 'teamake-build project values)
-    (teamake-build--do-build-current)))
+  (let* ((project (transient-scope))
+         (current-args (transient-args 'teamake-build))
+         (expanded-args (seq-map
+                         (lambda (value)
+                           (teamake-build--expand-macro-in-current-value value project))
+                         current-args)))
+    (teamake-set-current-values 'teamake-build project current-args)
+    (apply #'teamake-process-invoke-cmake
+           project
+           "--build"
+           (plist-get project :binary-dir)
+           expanded-args)))
 
 (transient-define-suffix teamake-build--build-preset ()
   :description "Build preset"
   (interactive)
-  (let* ((binary-dir (transient-scope))
-         (project (teamake-cmake-cache--project-from-binary-dir binary-dir)))
-    (teamake-preset-select-from-project project :buildPresets)
-    (teamake-build--do-build-preset)))
+  (let* ((project (transient-scope))
+         (preset (teamake-preset-select-build project)))
+    (apply #'teamake-process-invoke-cmake
+           project
+           "--build"
+           (plist-get project :binary-dir)
+           (format "--preset=%s" (plist-get preset :name)))))
 
-(transient-define-suffix teamake-build--save-current ()
-  "Save current build settings."
+(transient-define-suffix teamake-build--native-tool-option ()
+  :description
+  (lambda ()
+    (let ((text "Native tool option")
+          (option "--")
+          (value '()))
+      (format "%s (%s)"
+              text
+              (if value (propertize (format "%s%s" option value) 'face 'transient-value)
+                option))))
   (interactive)
-  (teamake-transient-save-current-values)
+  (let ((project (transient-scope)))
+    )
   )
-
-(transient-define-suffix teamake-build--save-current-as ()
-  "Save the current build settings with a name."
-  (interactive)
-  (teamake-transient-save-current-as)
-  )
-
-(transient-define-suffix teamake-build--load ()
-  "Load a previously saved setting."
-  (interactive)
-  (teamake-transient-load))
 
 (defun teamake-build--possible (project)
   "Determine if PROJECT contain enough information for `teamake-build'."
-  (and (plist-member project :binary-dir)
-       (teamake--find-root (plist-get project :binary-dir)
-                           "CMakeCache.txt")))
+  (teamake-project-has-valid-binary-dir-p project))
 
 (defun teamake-build--setup (project)
   "Setup `teamake-build' from PROJECT."
@@ -131,36 +119,37 @@ target in the build tree."
 ;;;###autoload
 (transient-define-prefix teamake-build (project)
   [:description
-   (lambda () (teamake-project-heading "CMake build" (transient-scope)))
+   (lambda ()
+     (format "%s %s\n\n%s\n"
+             (propertize "CMake Build" 'face 'teamake-heading)
+             (propertize (plist-get (transient-scope) :name) 'face 'teamake-project-name)
+             (propertize (format "cmake --build %s\n      <options>"
+                                 (plist-get (transient-scope) :binary-dir))))
+     )
+   ["Options"
+    ("cfg" teamake-transient--configuration)
+    ("pr" teamake-build--select-preset)
+    ("pa" "Parallel builds, using this amount of jobs" "--parallel="
+     :prompt "Parallel builds: "
+     :reader transient-read-number-N+)
+    ("t" "Build target instead of default targets" "--target="
+     :prompt "Targets: "
+     :choices (lambda () (teamake-build--read-build-targets (transient-scope)))
+     :multi-value repeat)
+    ("r" "Restore/resolve package references during build"
+     "--resolve-package-references="
+     :prompt "Select package restore/resolve: "
+     :choices ("on" "only" "off"))
+    ;; ("n" "Native tool option" "--"
+    ;;  :class transient-option
+    ;;  :prompt "Options: ")
+    ]
+   ]
   ["Flags"
    ("-c" "Build target 'clean' first, then build actual target" "--clean-first")
    ("-v" "Verbose output" "--verbose")]
-  ]
-  ["Options"
-   ("pr" teamake-build--select-preset)
-   ("pa" "Parallel builds, using this amount of jobs" "--parallel="
-    :prompt "Parallel builds: "
-    :reader transient-read-number-N+)
-   ("t" "Build target instead of default targets" "--target="
-    :prompt "Targets: "
-    :choices (lambda () (teamake-build--read-build-targets (transient-scope)))
-    :multi-value repeat)
-
-   ;; ("c" "For multi configuration tools" "--config="
-   ;;  :prompt "Configuration: "
-   ;;  :choices ("Release" "Debug" "RelWithDebInfo"))
-
-   ("cfg" teamake-transient--configuration)
-
-   ("r" "Restore/resolve package references during build"
-    "--resolve-package-references="
-    :prompt "Select package restore/resolve: "
-    :choices ("on" "only" "off"))
-   ;; ("n" "Native tool option" "--"
-   ;;  :class transient-option
-   ;;  :prompt "Options: ")
-   ]
-  [["Do"
+  [
+   ["Do"
     ("xx" teamake-build--build-current)
     ("xp" teamake-build--build-preset)
     ]
@@ -169,6 +158,10 @@ target in the build tree."
     ("xa" "Save as" teamake-transient-save-current-as :transient t)
     ("xl" "Load" teamake-transient-load)
     ("xd" "Delete" teamake-transient-delete :transient t)
+    ]
+   ["Navigate"
+    ("C" teamake-project--teamake-cmake-navigate)
+    ("P" teamake-cmake--teamake-project)
     ]
    ]
   (interactive

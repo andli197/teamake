@@ -5,11 +5,6 @@
 (require 'json)
 (require 'teamake-core)
 
-;; TODO:
-;; 1. Rename all function from prefix teamake-preset-- to teamake-cmake--
-;; 2. Move functions from teamake-cmake-cache to here
-;; 2.1 Rrename all prefix teamake-cmake-cache-- to teamake-cmake--
-
 (defun teamake-preset--read-json-file (preset-file)
   "Read the file specified by PRESET-FILE as a CMakePresets.json file.
 
@@ -18,6 +13,59 @@ Name must not match CMakePresets.json but format must be that of a preset file."
         (json-array-type 'list)
         (json-key-type 'keyword))
     (json-read-file preset-file)))
+
+;; (setq json-schema (teamake-preset--read-json-file "c:/Arbetsfiler/Andreas/emacs/development/cmake-project/lisp/json-schema.org_draft-07_schema.json"))
+;; (plist-get json-schema :definitions)
+
+;; (defun teamake-preset-schema--get-properties (json-node version)
+;;   "Return the :properties object for version."
+;;   (seq-find
+;;      (lambda (n)
+;;        (= (plist-get (plist-get (plist-get n :properties) :version) :const)
+;;           version))
+;;      json-node))
+
+;; (defun teamake-preset-parse-schema (schema-file version)
+;;   "Parse the json SCHEMA-FILE for CMakePresets in VERSION.
+
+;; This is used for parsing values and building the values from
+;; presets to the transients."
+;;   (let* ((schema (teamake-preset--read-json-file schema-file)))
+;;     )
+;;     )
+
+
+;; (defun teamake-preset-schema--parse-node (json-node definitions)
+;;   "Parse JSON-NODE according to read DEFINITIONS."
+;;   (let ((node json-node)
+;;         (key '())
+;;         (value '()))
+;;     (while node
+;;       (setq key (car node)
+;;             value (cadr node)
+;;             node (cddr node))
+;;       (cond ((eq key :$ref) (teamake-preset-schema--lookup-ref value definitions))
+;;             ((eq key :properties) (
+;;       ))
+;;   )
+
+;; (setq schema (teamake-preset--read-json-file
+;;                 "c:/Arbetsfiler/Andreas/emacs/development/cmake-project/lisp/schema.json"))
+;; (setq schema-v4-properties
+;;       (plist-get (teamake-preset-schema--get-properties
+;;                   (plist-get schema :oneOf) 4)
+;;                  :properties)
+;;       definitions (plist-get schema :definitions))
+;; (let ((properties schema-v4-properties)
+;;       (prop '())
+;;       (val '()))
+;;   (while properties
+;;     (setq prop (car properties)
+;;           val (cadr properties)
+;;           properties (cddr properties))
+    
+;;     (message "%s: %s" prop (plist-get val :$ref))
+;;     ))
 
 (defun teamake-preset--get-referenced-file (reference origin)
   "Return the deduced filepath to REFERENCE from ORIGIN."

@@ -20,8 +20,8 @@
           (setq pos (match-end 0))))
       (setq generators (reverse generators)))))
 
-(transient-define-suffix teamake-configure--do-configure ()
-  "Execute the currently configured Teamake command."
+(transient-define-suffix teamake-configure--configure-current ()
+  :description "Configure current"
   (interactive)
   (let* ((project (transient-scope))
          (current-args (transient-args 'teamake-configure))
@@ -35,10 +35,12 @@
            project
            "-S"
            source-dir
+           "-B"
+           (plist-get project :binary-dir)
            expanded-args)))
 
-(transient-define-suffix teamake-configure--select-and-execute-preset ()
-  "Select a configuration preset and execute it without reading."
+(transient-define-suffix teamake-configure--configure-preset ()
+  :description "Configure preset"
   (interactive)
   (let* ((project (transient-scope))
          (preset (teamake-preset-select-configuration project)))
@@ -54,7 +56,7 @@
   (let ((project (transient-scope))
         (values (transient-args 'teamake-configure)))
     (teamake-set-current-values 'teamake-configure project values)
-    (teamake-project--save-project)))
+    (teamake-save-project project)))
 
 (transient-define-suffix teamake-configure--save-current-as ()
   "Save the current configure as current for later use."
@@ -202,29 +204,28 @@ Use current configure preset as base for preset specific expansions."
   :description "Read from preset"
   (interactive)
   (let* ((project (transient-scope))
-         (preset (teamake-preset-select-from-project project :configurePresets))
+         (preset (teamake-preset-select-configuration project))
          (values (teamake-configure--preset-to-values preset)))
     (if (plist-member preset :binaryDir)
         (plist-put project :binary-dir
                    (teamake-configure--expand-macro-in-current-value
                     (plist-get preset :binaryDir) project)))
-    
     (teamake-set-current-values 'teamake-configure project values)
     (teamake-setup-transient 'teamake-configure project)))
 
 (defun teamake-configure--possible (project)
   "Determine if PROJECT contain enough information for `teamake-configure'."
-  (interactive)
-  (or (teamake-get-current-values 'teamake-configure project)
-      (plist-get project :source-dir)))
+  (teamake-project-has-valid-source-dir-p project))
 
 (transient-define-suffix teamake-configure--setup (project)
   "Setup `teamake-configure' from PROJECT."
   (interactive)
+  (unless (teamake-configure--possible project)
+    (user-error "Project not correctly configured with source dir"))
   (teamake-setup-transient 'teamake-configure project))
 
 (transient-define-suffix teamake-configure--binary-dir ()
-  :transient 'transient--do-recurse
+  :transient 'transient--do-replace
   :description
   (lambda ()
     (let ((binary-dir (plist-get (transient-scope) :binary-dir))
@@ -235,14 +236,22 @@ Use current configure preset as base for preset specific expansions."
                 option))))
   (interactive)
   (let* ((project (transient-scope))
-         (binary-dir (read-directory-name "Binary dir: " (plist-get project :binary-dir) '() '() t)))
-    (plist-put project :binary-dir binary-dir)))
+         (binary-dir (read-directory-name "Binary dir: " (plist-get project :binary-dir) '() '())))
+    (plist-put project :binary-dir binary-dir)
+    (teamake-setup-transient 'teamake-configure project)))
 
 ;;;###autoload
-
 (transient-define-prefix teamake-configure (project)
   [:description
-   (lambda () (teamake-project-heading "CMake Configure" (transient-scope)))
+   (lambda ()
+     ;; (teamake-project-heading "CMake Configure" (transient-scope))
+     (format "%s %s\n\n%s\n"
+             (propertize "CMake Configure" 'face 'teamake-heading)
+             (propertize (plist-get (transient-scope) :name) 'face 'teamake-project-name)
+             (propertize (format "cmake -S %s\n      -B %s \n      <options>"
+                                 (plist-get (transient-scope) :source-dir)
+                                 (plist-get (transient-scope) :binary-dir))))
+     )
    ["Options"
     ("b" teamake-configure--binary-dir)
     (5 "C" "Pre-load a script to populate the cache" "-C"
@@ -352,20 +361,36 @@ Use current configure preset as base for preset specific expansions."
     :prompt "Select log level: "
     :choices ("ERROR" "WARNING" "NOTICE" "STATUS" "VERBOSE" "DEBUG" "TRACE"))
    ]
-  [["Do"
-    ("xx" "Execute current" teamake-configure--do-configure)
-    ("xp" "Execute preset" teamake-configure--select-and-execute-preset)
-    ;; ("xb" teamake-configure--build-menu :transient t)
+  [
+   ["Do"
+    ("xx" "Execute current" teamake-configure--configure-current)
+    ("xp" teamake-configure--configure-preset)
     ]
-   ["Manage"
-    ("xsc" "Save" teamake-configure--save-current :transient t)
-    ("xsa" "Save as" teamake-configure--save-current-as :transient t)
-    ("xl" " Load" teamake-configure--load)]]
+   ["Navigate"
+    ("C" teamake-project--teamake-cmake-navigate)
+    ("P" teamake-cmake--teamake-project)
+    ]
+   ]
+  ["Manage"
+   [:description
+    (lambda ()
+      (propertize (plist-get (transient-scope) :name) 'face 'teamake-project-name))
+    ("xc" "Save"    teamake-transient-save-current-values :transient t)
+    ("xa" "Save as" teamake-transient-save-current-as :transient t)
+    ("xl" "Load"    teamake-transient-load)
+    ("xd" "Delete"  teamake-transient-delete :transient t)
+    ]
+   ["Templates"
+    ("gc" "Save"    teamake-transient-save-current-values :transient t)
+    ("ga" "Save as" teamake-transient-save-current-as :transient t)
+    ("gl" "Load"    teamake-transient-load)
+    ("gd" "Delete"  teamake-transient-delete :transient t)
+    ]
+   ]
   (interactive
    (list (teamake-project-from-source-dir
           (or (teamake--find-root default-directory "CMakeLists.txt")
               default-directory))))
-
   (teamake-setup-transient 'teamake-configure project))
 
 

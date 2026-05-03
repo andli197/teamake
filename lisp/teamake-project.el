@@ -192,25 +192,11 @@ configuration values."
 (defun teamake-project--save-project ()
   "Save the project in transient-scope to the `teamake-project-configurations'."
   (interactive)
-  (let* ((project (transient-scope))
-         (project-display (teamake-project--unique-human-readable project)))
-    (if (teamake-project--get-project-from-unique-human-readable project-display)
-        (progn 
-          (seq-do
-           (lambda (p)
-             (if (teamake-project--matching-project-p project p)
-                 (setq p project)))
-           teamake-project-configurations)
-          (message "Project %s updated!" project-display))
-      (progn
-        (push project teamake-project-configurations)
-        (message "Project %s added!" project-display))))
-  (teamake-save-project-configurations))
+  (teamake-save-project (transient-scope)))
 
 (transient-define-suffix teamake-project--load-project ()
   "Show a list of all known projects and prompt for one to select."
-  :transient 'transient--do-recurse
-  :description "Load"
+  :transient 'transient--do-replace
   (interactive)
   (let* ((projects-as-human-readable
           (seq-map
@@ -242,6 +228,56 @@ configuration values."
            teamake-project-configurations)))
   (teamake-save-project-configurations))
 
+(defun teamake-project--new-project (source-dir)
+  "Create new project from SOURCE-DIR."
+  (list :name (or (teamake-project--read-project-name-from-cmakelists source-dir)
+                  "New project")
+        :source-dir source-dir))
+
+(transient-define-suffix teamake-project--create-project ()
+  "Prompt for path to code of new project."
+  (interactive)
+  (let* ((source-dir (teamake-select-source-dir))
+         (project (teamake-project--new-project source-dir)))
+    (add-to-list 'teamake-project-configurations project)
+    (transient-setup 'teamake-project '() '() :scope project)))
+
+(transient-define-suffix teamake-project--teamake-cmake-navigate ()
+  :description "CMake"
+  :transient 'transient--do-replace
+  :if (lambda () (transient-scope))
+  (interactive)
+  (transient-setup 'teamake-cmake-navigation '() '() :scope (transient-scope)))
+
+(transient-define-prefix teamake-project (project)
+  "Manage `teamake-project' settings."
+  [:if
+   (lambda () (transient-scope))
+   "Project configuration"
+   ("n" teamake-project--project-name)
+   ("s" teamake-project--project-source-dir)
+   ("c" teamake-transient--configuration)
+   ]
+  [:if
+   (lambda () (transient-scope))
+   "Visit"
+   ("vs" teamake-project--visit-source-dir)
+   ("vb" teamake-project--visit-binary-dir)
+   ]
+  ["Project"
+   ("N" "New" teamake-project--create-project)
+   ("S" "Save" teamake-project--save-project)
+   ("L" "Load" teamake-project--load-project)
+   ("D" "Delete" teamake-project--delete-project)
+   ]
+  ["Navigate"
+   ("C" teamake-project--teamake-cmake-navigate)
+   ]
+  (interactive
+   (list (teamake-get-or-create-project-from-source-dir default-directory)))
+  (transient-setup 'teamake-project '() '() :scope project)
+  )
+
 (transient-define-suffix teamake-project--teamake-configure ()
   :description "Configure"
   :transient 'transient--do-recurse
@@ -271,76 +307,42 @@ configuration values."
   (teamake-test--setup (transient-scope)))
 
 (transient-define-suffix teamake-project--teamake-preset ()
-  :description "Preset"
+  :description "Preset handling"
   :transient 'transient--do-recurse
   :if (lambda () (teamake-preset--possible (transient-scope)))
   (interactive)
   (teamake-preset--setup (transient-scope)))
 
-(defun teamake-project--new-project (source-dir)
-  "Create new project from SOURCE-DIR."
-  (list :name (or (teamake-project--read-project-name-from-cmakelists source-dir)
-                  "New project")
-        :source-dir source-dir))
-
-(transient-define-suffix teamake-project--create-project ()
-  "Prompt for path to code of new project."
+(transient-define-suffix teamake-cmake--teamake-project ()
+  :description "Project configuration"
+  :transient 'transient--do-replace
   (interactive)
-  (let* ((source-dir (teamake-select-source-dir))
-         (project (teamake-project--new-project source-dir)))
-    (add-to-list 'teamake-project-configurations project)
-    (transient-setup 'teamake-project '() '() :scope project)))
+  (transient-setup 'teamake-project '() '() :scope (transient-scope)))
 
-(transient-define-prefix teamake-project (project)
-  "Manage `teamake-project' settings."
+(transient-define-prefix teamake-cmake-navigation (project)
   [:if
-   (lambda () (transient-scope))
-   "Project configuration"
-   ("pn" teamake-project--project-name)
-   ("ps" teamake-project--project-source-dir)
-   (:info
-    (lambda () (format " Configuration %s"
-                       (propertize (or (plist-get (transient-scope) :configuration)
-                                       "No configuration")
-                                   'face 'transient-value))))
+   (lambda () (transient-scope) "")
+   :description
+   (lambda () (format "%s %s %s\n"
+                      (propertize "CMake" 'face 'teamake-heading)
+                      (propertize (plist-get (transient-scope) :configuration) 'face 'teamake-heading)
+                      (propertize (plist-get (transient-scope) :name) 'face 'teamake-project-name)
+                      ))
+   ("c" teamake-project--teamake-configure)
+   ("b" teamake-project--teamake-build)
+   ("i" teamake-project--teamake-install)
+   ("t" teamake-project--teamake-test)
+   ("pr" teamake-project--teamake-preset)
+   ;; ("pa" teamake-project--teamake-package)
+   ;; ("w" teamake-project--teamake-workflow)
    ]
-  [:if
-   (lambda () (transient-scope))
-   "Visit"
-   ("vc" teamake-project--visit-source-dir)
-   ("vb" teamake-project--visit-binary-dir)
-   ]
-  [:if
-   (lambda () (transient-scope))
-   :description "CMake"
-   ("cc" teamake-project--teamake-configure)
-   ("cb" teamake-project--teamake-build)
-   ("ci" teamake-project--teamake-install)
-   ("ct" teamake-project--teamake-test)
-   (5 "cp" teamake-project--teamake-preset)
-   ;; ("ca" teamake-project--teamake-package)
-   ;; ("cw" teamake-project--workflow)
-   ]
-  ;; ["TEamake"
-  ;;  ("tc" teamake-project--clear-process-buffer)]
-  ["Project"
-   ("C" "Create" teamake-project--create-project :transient t)
-   ("S" "Save" teamake-project--save-project :transient t)
-   ("L" teamake-project--load-project :transient t)
-   ("D" "Delete" teamake-project--delete-project :transient t)
+  ["Navigate"
+   ("P" teamake-cmake--teamake-project)
    ]
   (interactive
    (list (teamake-get-or-create-project-from-source-dir default-directory)))
-  ;; (interactive
-  ;;  (list (teamake--project-from-source-dir
-  ;;         (or (teamake--find-root default-directory "CMakeLists.txt")
-  ;;             default-directory))))
-         
-   ;; (let ((project-root (teamake--find-root default-directory "CMakeLists.txt")))
-   ;;   (list (teamake--project-from-path (or project-root default-directory)))))
-  (transient-setup 'teamake-project '() '() :scope project)
+  (transient-setup 'teamake-cmake-navigation '() '() :scope project)
   )
-
 
 (provide 'teamake-project)
 ;;; teamake-project.el ends here

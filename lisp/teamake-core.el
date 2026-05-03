@@ -131,6 +131,37 @@ file specified by `teamake-project-configurations-file'."
       (pp teamake-project-configurations (current-buffer)))
     (write-region '() '() teamake-project-configurations-file '() 'silent)))
 
+(defun teamake--human-readable (project)
+  "Display PROJECT as a unique identifier."
+  (format "%s (%s)"
+          (plist-get project :name)
+          (plist-get project :source-dir)))
+
+(defun teamake--matching-project-p (p1 p2)
+  "Return if project P1 is determined to match P2."
+  (string= (teamake--human-readable p1) (teamake--human-readable p2)))
+
+(defun teamake-save-project (project)
+  "Save PROJECT to `teamake-project-configurations'.
+
+If the PROJECT matches an existing entry in `teamake-project-configurations'
+it will be updated, otherwise it will be added."
+  (let* ((hr (teamake--human-readable project))
+         (match (seq-find
+                 (lambda (p) (teamake--matching-project-p p project))
+                 teamake-project-configurations)))
+    (if match
+        (progn
+          (seq-do
+           (lambda (p)
+             (if (teamake--matching-project-p project p)
+                 (setq p project)))
+           teamake-project-configurations)
+          (message "Project %s updated!" (teamake--human-readable project)))
+      (progn
+        (push project teamake-project-configurations)
+        (message "Project %s added!" (teamake--human-readable project))))))
+
 (defun teamake-create-project-from-source-dir (source-dir)
   "Create a new project from SOURCE-DIR.
 
@@ -185,6 +216,7 @@ PATH must be from within the code tree, otherwise return nil."
 
 (defalias 'teamake-project-from-source-dir-or-create 'teamake-get-or-create-project-from-source-dir)
 
+;;; TODO: Remove?
 (defun teamake-project-heading (text project)
   "Return a propertized PROJECT heading with TEXT.
 
@@ -247,6 +279,18 @@ prompt user for input.  A correct binary-dir must contain a CMakeCache.txt file.
       (setq binary-dir (read-directory-name
                         "Invalid CMake binary dir, select new (must contain CMakeCache.txt): " '() '() t)))
     (directory-file-name binary-dir)))
+
+(defun teamake-project-has-valid-source-dir-p (project)
+  "Determine if PROJECT has a valid configured source-dir."
+  (and (plist-member project :source-dir)
+       (file-exists-p (plist-get project :source-dir))
+       (teamake--find-root (plist-get project :source-dir) "CMakeLists.txt")))
+
+(defun teamake-project-has-valid-binary-dir-p (project)
+  "Determine if PROJECT has a valid configured binary-dir."
+  (and (plist-member project :binary-dir)
+       (file-exists-p (plist-get project :binary-dir))
+       (teamake--find-root (plist-get project :binary-dir) "CMakeCache.txt")))
 
 ;;===========================================
 ;; Transient and current/save values handling
@@ -319,7 +363,8 @@ prompt user for input.  A correct binary-dir must contain a CMakeCache.txt file.
   (interactive)
   (let* ((project (transient-scope))
          (values (transient-args transient-current-command)))
-    (teamake-set-current-values transient-current-prefix project values)))
+    (teamake-set-current-values transient-current-prefix project values)
+    (teamake-save-project project)))
 
 (transient-define-suffix teamake-transient-save-current-as ()
   "Prompt user for a name to save current values for `transient-current-command'."
@@ -349,8 +394,7 @@ prompt user for input.  A correct binary-dir must contain a CMakeCache.txt file.
   (let* ((project (transient-scope))
          (existing-names (teamake-get-save-names transient-current-command project))
          (name (completing-read "Delete: " existing-names '() t)))
-    (teamake-delete-save-value transient-current-command project name))
-  )
+    (teamake-delete-save-value transient-current-command project name)))
 
 ;;=======================
 ;; Misc utility functions
@@ -359,13 +403,13 @@ prompt user for input.  A correct binary-dir must contain a CMakeCache.txt file.
   :description
   (lambda ()
     (let* ((project (transient-scope))
-           (text "For multi configuration tools")
+           (text "Configuration (for multi-configuration tools)")
+           (option "--config=")
            (value (plist-get project :configuration)))
-      (if value
-          (format "%s (%s)"
-                  text
-                  (propertize (format "--config=%s" value) 'face 'transient-value))
-        (format "%s (--config=)" text))))
+      (format "%s (%s)" text (if value
+                                 (propertize (format "%s%s" option value)
+                                             'face 'transient-value)
+                               option))))
   (interactive)
   (let* ((project (transient-scope))
          (values (transient-args transient-current-command))
@@ -459,7 +503,7 @@ Version is divided into MAJOR, MINOR and PATCH and matched using Emacs
 ;;  '((?a "always" "Accept certificate for this and future sessions.")
 ;;    (?s "session only" "Accept certificate this session only.")
 ;;    (?n "no" "Refuse to use certificate, close connection."))
-;;  "Build a "
+;;  "Longer help string here"
 ;;  t)
 ;; (defun teamake--completing-read (prompt)
 ;;   ;; https://www.gnu.org/software/emacs/manual/html_node/elisp/Programmed-Completion.html

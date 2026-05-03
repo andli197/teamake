@@ -141,27 +141,17 @@ PRESETS is representing all presets and CATEGORY is the preset category to selec
     is-condition-active))
 
 (transient-define-suffix teamake-preset-select-from-project (project category)
-  "Select preset in PROJECT for the given CATEGORY and use as current."
+  "Select preset in PROJECT for the given CATEGORY.
+
+The selected preset is fused among the inheritance chain and saved as current preset
+for the project, ready to be used."
   (interactive)
-  (let ((preset (teamake-cmake-select-preset-from-path
-                 (plist-get project :source-dir)
-                 category
-                 (teamake-preset--get-current-configuration-preset-name project))))
-    (teamake-preset--set-current project category preset)
-    preset))
-
-
-(defun teamake-preset--get-user-selectable-configure-presets (presets)
-  "Filter out user selectable configuration presets from PRESETS."
-  (teamake-preset--get-user-selectable-presets presets :configurePresets))
-
-(defun teamake-preset--get-user-selectable-build-presets (presets configure-preset)
-  "Filter out user selectable build presets from PRESETS matching the CONFIGURE-PRESET."
-  (teamake-preset--get-user-selectable-presets presets :buildPresets configure-preset))
-
-(defun teamake-preset--get-user-selectable-test-presets (configure-preset presets)
-  "Filter out user selectable test presets from PRESETS matching the CONFIGURE-PRESET."
-  (teamake-preset--get-user-selectable-presets presets :testPresets configure-preset))
+  (teamake-preset--set-current
+   project category
+   (teamake-cmake-select-preset-from-path
+    (plist-get project :source-dir)
+    category
+    (teamake-preset--get-current-configuration-preset-name project))))
 
 (defun teamake-preset--get-current (project category)
   "Return current CATEGORY from PROJECT."
@@ -174,14 +164,11 @@ PRESETS is representing all presets and CATEGORY is the preset category to selec
   (interactive)
   (let ((presets (teamake-get-current-values 'teamake-preset project)))
      (setq presets (plist-put presets category preset))
-    (teamake-set-current-values 'teamake-preset project presets)))
+     (teamake-set-current-values 'teamake-preset project presets))
+  preset)
 
-
-
-
-;; Specific
-;;==================
-
+;; Specific accessors for presets
+;;===============================
 (defun teamake-preset--get-current-configuration-preset (project)
   "Return current configuration preset from PROJECT."
   (interactive)
@@ -196,11 +183,21 @@ PRESETS is representing all presets and CATEGORY is the preset category to selec
   "Return current test preset for PROJECT."
   (teamake-preset--get-current project :testPresets))
 
+(defun teamake-preset--get-current-package-preset (project)
+  "Return current test preset for PROJECT."
+  (teamake-preset--get-current project :packagePresets))
+
+(defun teamake-preset--get-current-workflow-preset (project)
+  "Return current test preset for PROJECT."
+  (teamake-preset--get-current project :workflowPresets))
+
 (defun teamake-preset--get-current-configuration-preset-name (project)
   "Return current configuration preset name from PROJECT."
   (interactive)
   (plist-get (teamake-preset--get-current-configuration-preset project) :name))
 
+;; Specific manipulators for presets
+;;==================================
 (defun teamake-preset--set-current-configuration-preset (project preset)
   "Set current configuration preset in PROJECT to PRESET."
   (teamake-preset--set-current project :configurePresets preset))
@@ -209,141 +206,119 @@ PRESETS is representing all presets and CATEGORY is the preset category to selec
   "Set current build PRESET in PROJECT."
   (teamake-preset--set-current project :buildPresets preset))
 
-(defun teamake-preset--set-current-test-preset (project preset-name)
+(defun teamake-preset--set-current-test-preset (project preset)
   "Set current test PRESET in PROJECT."
   (teamake-preset--set-current project :testPresets preset))
 
+(defun teamake-preset--set-current-package-preset (project preset)
+  "Set current package PRESET in PROJECT."
+  (teamake-preset--set-current project :packagePresets preset))
+
+(defun teamake-preset--set-current-workflow-preset (project preset)
+  "Set current workflow PRESET in PROJECT."
+  (teamake-preset--set-current project :workflowPresets preset))
+
+;; Specific selectors for presets
+;;===============================
 (defun teamake-preset-select-configuration (project)
   "Select a CMake configuration preset from PROJECT."
-  (interactive)
-  ;; save presets in project???????? Needs some thinking, due to cache invalidation
-  (let ((preset (teamake-preset-select-configuration-preset-from-path
-                 (plist-get project :source-dir)))
-        (current-presets (teamake-get-current-values 'teamake-preset project)))
-    (plist-put current-presets preset :configurePresets)
-    (teamake-set-current-values 'teamake-preset project current-presets)
-    preset))
+  (teamake-preset-select-from-project project :configurePresets))
 
 (defun teamake-preset-select-build (project)
   "Select a CMake build preset from PROJECT."
   (interactive)
-  (let* ((presets (teamake-cmake-parse-presets (plist-get project :source-dir)))
-         (configuration-preset (teamake-preset--get-current-configuration-preset project))
-         (selectable-build-presets
-          (teamake-preset--get-user-selectable-build-presets
-           presets (plist-get configuration-preset :name)))
-         (selectable-names
-          (seq-do (lambda (p) (teamake-preset--display-name-from-preset p))
-                  selectable-build-presets))
-         (build-preset-name (completing-read "Build preset: " selectable-names '() t))
-         (build-preset (teamake-preset--get-preset-from-name build-preset-name selectable-build-presets))
-         (fused-build-preset (teamake-preset--fuse (build-preset presets))))
-    (teamake-preset--set-current-build-preset fused-build-preset)
-    fused-build-preset))
+  (teamake-preset-select-from-project project :buildPresets))
 
-(defun teamake-preset-select-configuration-preset-from-path (source-path)
-  "Read all configuration presets from SOURCE-PATH and preset to user."
-  (let* ((presets (teamake-cmake-parse-presets source-path))
-         (user-selectable-presets
-          (teamake-preset--get-user-selectable-configure-presets presets))
-         (names
-          (seq-map (lambda (p) (teamake-preset--display-name-from-preset p))
-                   user-selectable-presets))
-         (preset-name
-          (completing-read "Configuration preset: "
-                           names '() t)))
-    (teamake-preset--fuse (teamake-preset--get-preset-from-name preset-name presets)
-                          presets)))
-
-(defun teamake-preset-select-build-preset (project)
+(defun teamake-preset-select-test (project)
   "Select a CMake build preset from PROJECT."
-  (let* ((presets (teamake-cmake-parse-presets (plist-get project :source-dir)))
-         (config-preset (teamake-preset--get-current-configuration-preset-name project))
-         (user-selectable-presets
-          (teamake-preset--get-user-selectable-build-presets presets config-preset))
+  (interactive)
+  (teamake-preset-select-from-project project :testPresets))
 
-         (names
-          (seq-map (lambda (p) (teamake-preset--display-name-from-preset p))
-                   user-selectable-presets))
-         (preset-name
-          (completing-read "Build preset: "
-                           names '() t)))
-    (teamake-preset--get-preset-from-name preset-name presets)))
+(defun teamake-preset-select-package (project)
+  "Select a CMake build preset from PROJECT."
+  (interactive)
+  (teamake-preset-select-from-project project :packagePresets))
 
-(defun teamake-preset-select-test-preset-from-project (project)
-  "Select a CMake test preset from PROJECT."
-  (let* ((presets (teamake-cmake-parse-presets (plist-get project :source-dir)))
-         (config-preset (teamake-preset--get-current-configuration-preset-name project))
-         (user-selectable-presets
-          (teamake-preset--get-user-selectable-test-presets config-preset presets))
+(defun teamake-preset-select-workflow (project)
+  "Select a CMake build preset from PROJECT."
+  (interactive)
+  (teamake-preset-select-from-project project :packagePresets))
 
-         (names
-          (seq-map (lambda (p) (teamake-preset--display-name-from-preset p))
-                   user-selectable-presets))
-         (preset-name
-          (completing-read "Test preset: "
-                           names '() t)))
-    (teamake-preset--get-preset-from-name preset-name presets)))
+(defun teamake-preset--description (text project category)
+  "Create description for preset CATEGORY.
+
+Construct description from TEXT fetching the name of the current CATEGORY
+preset from PROJECT."
+  (format "%s (%s)" text
+          (propertize (or (plist-get
+                           (teamake-preset--get-current project category)
+                           :name)
+                          "No preset selected")
+                      'face 'transient-value)))
 
 (transient-define-suffix teamake-preset--configuration ()
+  :transient 'transient--do-recurse
   :description
-  (lambda () (format "Configuration (%s)"
-                     (propertize
-                      (or (teamake-preset--get-current-configuration-preset-name (transient-scope))
-                          "No configuration selected")
-                      'face 'transient-value)))
+  (lambda ()
+    (teamake-preset--description "Configure" (transient-scope) :configurePresets))
   (interactive)
-  (let* ((project (transient-scope))
-         (preset (teamake-preset-select-configuration-preset project)))
-    (teamake-preset--set-current-configuration-preset project preset)
-    (transient-setup transient-current-command '() '() :scope project)))
+  (teamake-preset-select-from-project (transient-scope) :configurePresets))
 
 (transient-define-suffix teamake-preset--build ()
+  :transient 'transient--do-recurse
   :description
-  (lambda () (format "Build (%s)"
-                     (propertize
-                      (or (plist-get (teamake-preset--get-current-build-preset (transient-scope)) :name)
-                          "No build selected")
-                      'face 'transient-value)))
+  (lambda ()
+    (teamake-preset--description "Build" (transient-scope) :buildPresets))
   (interactive)
-  (let* ((project (transient-scope))
-         (preset (teamake-preset-select-build-preset project)))
-    (teamake-preset--set-current-build-preset project preset)
-    (transient-setup transient-current-command '() '() :scope project)))
+  (teamake-preset-select-from-project (transient-scope) :buildPresets))
 
 (transient-define-suffix teamake-preset--test ()
+  :transient 'transient--do-recurse
   :description
-  (lambda () (format "Test (%s)"
-                     (propertize
-                      (or (teamake-preset--get-current-test-preset (transient-scope))
-                          "No test selected")
-                      'face 'transient-value)))
+  (lambda ()
+    (teamake-preset--description "Test" (transient-scope) :testPresets))
   (interactive)
-  (let* ((project (transient-scope))
-         (preset (teamake-preset-select-test-preset-from-project project)))
-    (teamake-preset--set-current-test-preset project (plist-get preset :name))
-    (transient-setup transient-current-command '() '() :scope project)))
+  (teamake-preset-select-from-project (transient-scope) :testPresets))
 
+(transient-define-suffix teamake-preset--package ()
+  :transient 'transient--do-recurse
+  :description
+  (lambda ()
+    (teamake-preset--description "Package" (transient-scope) :packagePresets))
+  (interactive)
+  (teamake-preset-select-from-project (transient-scope) :packagePresets))
+
+(transient-define-suffix teamake-preset--workflow ()
+  :transient 'transient--do-recurse
+  :description
+  (lambda ()
+    (teamake-preset--description "Workflow" (transient-scope) :workflowPresets))
+  (interactive)
+  (teamake-preset-select-from-project (transient-scope) :workflowPresets))
 
 (defun teamake-preset--possible (project)
   "Determine if PROJECT contain enough information for `teamake-preset'."
-  t)
+  (and (teamake-project-has-valid-source-dir-p project)
+       (file-exists-p (file-name-concat (plist-get project :source-dir) "CMakePresets.json"))))
 
 (defun teamake-preset--setup (project)
   "Setup `teamake-preset' from PROJECT."
+  (unless (teamake-preset--possible project)
+    (user-error "Project not correctly configured for using presets"))
   (teamake-setup-transient 'teamake-preset project))
 
 (transient-define-prefix teamake-preset (project)
   "Handle cmake presets for PROJECT."
   [:description
    (lambda ()
-     (format "CMake presets for %s"
-             (propertize (plist-get (transient-scope) :name))))
+     (format "%s %s\n"
+             (propertize "CMake Preset" 'face 'teamake-heading)
+             (propertize (plist-get (transient-scope) :name) 'face 'teamake-project-name)))
    ("c" teamake-preset--configuration)
    ("b" teamake-preset--build)
    ("t" teamake-preset--test)
-   ;; ("p" "Package" "--cc")
-   ;; ("w" "Workflow" "--cc")
+   ("p" teamake-preset--package)
+   ("w" teamake-preset--workflow)
    ]
   ["Do"
    ;; ("C" teamake-preset--execute-configuration)
