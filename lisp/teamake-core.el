@@ -269,7 +269,7 @@ prompt user for input.  A correct binary-dir must contain a CMakeCache.txt file.
                         "Invalid CMake binary dir, select new (must contain CMakeCache.txt): " '() '() t)))
     (directory-file-name binary-dir)))
 
-(defun teamake-project--has-valid-source-dir-p (project)
+(defun teamake--project-has-valid-source-dir-p (project)
   "Determine if PROJECT has a valid configured source-dir."
   (and (plist-member project :source-dir)
        (file-exists-p (plist-get project :source-dir))

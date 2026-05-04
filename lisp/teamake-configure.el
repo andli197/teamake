@@ -211,7 +211,7 @@ Use current configure preset as base for preset specific expansions."
 
 (defun teamake-configure--possible (project)
   "Determine if PROJECT contain enough information for `teamake-configure'."
-  (teamake-project--has-valid-source-dir-p project))
+  (teamake--project-has-valid-source-dir-p project))
 
 (transient-define-suffix teamake-configure--setup (project)
   "Setup `teamake-configure' from PROJECT."
