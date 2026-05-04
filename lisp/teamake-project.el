@@ -83,7 +83,6 @@ configuration values."
                 (cons "${sourceDirName}" (teamake-project--get-source-dir-name-from-project project))
                 (cons "${sourceParentDir}" (teamake-project--get-parent-dir-from-project project))
                 (cons "${hostSystemName}" (teamake-project--host-system-name))
-                ;; (cons "${presetName}" (teamake-project--preset-name project))
                 (cons "${generator}" (teamake-project--get-current-configured-generator project))
                 )))
 
@@ -122,20 +121,26 @@ configuration values."
           (setq replaced (string-replace variable (cdr match) replaced)))))
     replaced))
 
-(defun teamake-project--get-name-from-project (project)
+(defun teamake--name-from-project (project)
+  "Return :name from PROJECT or default to `teamake-undetermined-project-name'"
   (or (plist-get project :name)
-      "Unnamed project"))
+      teamake-undetermined-project-name))
+
+(defun teamake--configuration-from-project (project)
+  "Return :configuration from PROJECT or default value 'Not specified'."
+  (or (plist-get project :configuration)
+      "Not specified"))
 
 (transient-define-suffix teamake-project--project-name ()
   :transient 'transient--do-recurse
   :description
   (lambda () (format "Project name (%s)"
                      (propertize
-                      (teamake-project--get-name-from-project (transient-scope))
+                      (teamake--name-from-project (transient-scope))
                       'face 'transient-value)))
   (interactive)
   (let* ((project (transient-scope))
-         (name (read-string "Name: " (teamake-project--get-name-from-project project))))
+         (name (read-string "Name: " (teamake--name-from-project project))))
     (plist-put project :name name)
     (transient-setup 'teamake-project '() '() :scope project)))
 

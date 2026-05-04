@@ -170,7 +170,7 @@ Use current test preset as base for preset specific expansions."
 (defun teamake-test--possible (project)
   "Determine if PROJECT contain enough information for `teamake-test'."
   ;; TODO: Check if presets has test presets or if current binary dir contains any tests
-  (teamake-project-has-valid-binary-dir-p project))
+  (teamake--project-has-valid-binary-dir-p project))
 
 (defun teamake-test--setup (project)
   "Setup `teamake-test' from PROJECT."

@@ -216,23 +216,6 @@ PATH must be from within the code tree, otherwise return nil."
 
 (defalias 'teamake-project-from-source-dir-or-create 'teamake-get-or-create-project-from-source-dir)
 
-;;; TODO: Remove?
-(defun teamake-project-heading (text project)
-  "Return a propertized PROJECT heading with TEXT.
-
-Project name, source dir and binary dir are also shown."
-  (concat (format "%s %s\n"
-                  (propertize text 'face 'teamake-heading)
-                  (propertize
-                   (or (plist-get project :name) teamake-undetermined-project-name)
-                   'face 'teamake-project-name))
-          (if (plist-member project :source-dir) (format "  source-dir: %s\n"
-                                                     (propertize (plist-get project :source-dir)
-                                                                 'face 'teamake-path)))
-          (if (plist-member project :binary-dir) (format "  binary-dir: %s\n"
-                                                     (propertize (plist-get project :binary-dir)
-                                                                 'face 'teamake-path)))))
-
 ;;===========================
 ;; CMake directories handling
 ;;===========================
@@ -280,13 +263,13 @@ prompt user for input.  A correct binary-dir must contain a CMakeCache.txt file.
                         "Invalid CMake binary dir, select new (must contain CMakeCache.txt): " '() '() t)))
     (directory-file-name binary-dir)))
 
-(defun teamake-project-has-valid-source-dir-p (project)
+(defun teamake-project--has-valid-source-dir-p (project)
   "Determine if PROJECT has a valid configured source-dir."
   (and (plist-member project :source-dir)
        (file-exists-p (plist-get project :source-dir))
        (teamake--find-root (plist-get project :source-dir) "CMakeLists.txt")))
 
-(defun teamake-project-has-valid-binary-dir-p (project)
+(defun teamake--project-has-valid-binary-dir-p (project)
   "Determine if PROJECT has a valid configured binary-dir."
   (and (plist-member project :binary-dir)
        (file-exists-p (plist-get project :binary-dir))

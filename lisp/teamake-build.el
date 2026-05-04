@@ -108,7 +108,7 @@ target in the binary dir."
 
 (defun teamake-build--possible (project)
   "Determine if PROJECT contain enough information for `teamake-build'."
-  (teamake-project-has-valid-binary-dir-p project))
+  (teamake--project-has-valid-binary-dir-p project))
 
 (defun teamake-build--setup (project)
   "Setup `teamake-build' from PROJECT."

@@ -11,7 +11,7 @@
 
 (defun teamake-install--possible (project)
   "Determine if PROJECT contain enough information for `teamake-install'."
-  (teamake-project-has-valid-binary-dir-p project))
+  (teamake--project-has-valid-binary-dir-p project))
 
 (defun teamake-install--setup (project)
   "Setup `teamake-install' from PROJECT."

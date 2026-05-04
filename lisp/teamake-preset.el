@@ -298,7 +298,7 @@ preset from PROJECT."
 
 (defun teamake-preset--possible (project)
   "Determine if PROJECT contain enough information for `teamake-preset'."
-  (and (teamake-project-has-valid-source-dir-p project)
+  (and (teamake-project--has-valid-source-dir-p project)
        (file-exists-p (file-name-concat (plist-get project :source-dir) "CMakePresets.json"))))
 
 (defun teamake-preset--setup (project)
