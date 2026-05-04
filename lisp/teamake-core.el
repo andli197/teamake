@@ -55,6 +55,12 @@
   "Face for teamake project path."
   :group 'teamake-faces)
 
+(defface teamake-cmake-command
+  '((((class color) (background light)) :foreground "Medium spring green")
+    (((class color) (background  dark)) :foreground "Medium spring green"))
+  "Face for teamake cmake commands."
+  :group 'teamake-faces)
+
 (defcustom teamake-process-preferred-shell shell-file-name
   "User preferred shell for executing commands in.
 

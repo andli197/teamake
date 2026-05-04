@@ -32,12 +32,8 @@
                          current-args)))
     (teamake-set-current-values 'teamake-configure project current-args)
     (apply #'teamake-process-invoke-cmake
-           project
-           "-S"
-           source-dir
-           "-B"
-           (plist-get project :binary-dir)
-           expanded-args)))
+           (append (list "-S" source-dir "-B" (plist-get project :binary-dir))
+                   expanded-args))))
 
 (transient-define-suffix teamake-configure--configure-preset ()
   :description "Configure preset"
@@ -244,13 +240,13 @@ Use current configure preset as base for preset specific expansions."
 (transient-define-prefix teamake-configure (project)
   [:description
    (lambda ()
-     ;; (teamake-project-heading "CMake Configure" (transient-scope))
      (format "%s %s\n\n%s\n"
              (propertize "CMake Configure" 'face 'teamake-heading)
              (propertize (plist-get (transient-scope) :name) 'face 'teamake-project-name)
              (propertize (format "cmake -S %s\n      -B %s \n      <options>"
                                  (plist-get (transient-scope) :source-dir)
-                                 (plist-get (transient-scope) :binary-dir))))
+                                 (plist-get (transient-scope) :binary-dir))
+                         'face 'teamake-cmake-command))
      )
    ["Options"
     ("b" teamake-configure--binary-dir)
