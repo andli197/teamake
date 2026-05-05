@@ -64,8 +64,7 @@ target in the binary dir."
                      :scope project
                      :value values)))
 
-(transient-define-suffix teamake-build--build-current ()
-  :description "Build current"
+(transient-define-suffix teamake-build--execute-current ()
   (interactive)
   (let* ((project (transient-scope))
          (current-args (transient-args 'teamake-build))
@@ -80,8 +79,7 @@ target in the binary dir."
            (plist-get project :binary-dir)
            expanded-args)))
 
-(transient-define-suffix teamake-build--build-preset ()
-  :description "Build preset"
+(transient-define-suffix teamake-build--execute-preset ()
   (interactive)
   (let* ((project (transient-scope))
          (preset (teamake-preset-select-build project)))
@@ -149,9 +147,9 @@ target in the binary dir."
    ("-c" "Build target 'clean' first, then build actual target" "--clean-first")
    ("-v" "Verbose output" "--verbose")]
   [
-   ["Do"
-    ("xx" teamake-build--build-current)
-    ("xp" teamake-build--build-preset)
+   ["Build"
+    ("xx" "Current "teamake-build--execute-current)
+    ("xp" "Preset" teamake-build--execute-preset)
     ]
    ["Manage"
     ("xc" "Save" teamake-transient-save-current-values :transient t)

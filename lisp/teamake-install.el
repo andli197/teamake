@@ -19,25 +19,15 @@
     (user-error "Project not correctly configured with binary dir"))
   (teamake-setup-transient 'teamake-install project))
 
-(transient-define-suffix teamake-install--do-install-current ()
+(transient-define-suffix teamake-install--execute-current ()
   (interactive)
-  (let* ((binary-dir (transient-scope))
-         (project (teamake-cmake-cache--project-from-binary-dir binary-dir))
-         (values (teamake-get-current-values 'teamake-install project)))
+  (let* ((project (transient-scope))
+         (values (transient-args 'teamake-install)))
+    (teamake-set-current-values 'teamake-install project values)
     (apply #'teamake-process-invoke-cmake
            project
-           "--install"
-           binary-dir
-           (plist-get values :value))))
-
-(transient-define-suffix teamake-install--install-current ()
-  :description "Install current"
-  (interactive)
-  (let* ((binary-dir (transient-scope))
-         (project (teamake-cmake-cache--project-from-binary-dir binary-dir))
-         (value (transient-args 'teamake-install)))
-    (teamake-set-current-values 'teamake-install project value)
-    (teamake-install--do-install-current)))
+           (append (list "--install" (plist-get binary-dir :binary-dir)) values)
+           )))
 
 (transient-define-prefix teamake-install (project)
   [:description
@@ -70,8 +60,8 @@
    ("-v" "Enable verbose output" "--verbose")
    ]
   [
-   ["Do"
-    ("xx" teamake-install--install-current)
+   ["Install"
+    ("xx" "Current" teamake-install--execute-current)
     ]
    ["Manage"
     ("xc" "Save" teamake-transient-save-current-values :transient t)

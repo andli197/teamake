@@ -20,7 +20,7 @@
           (setq pos (match-end 0))))
       (setq generators (reverse generators)))))
 
-(transient-define-suffix teamake-configure--configure-current ()
+(transient-define-suffix teamake-configure--execute-current ()
   :description "Configure current"
   (interactive)
   (let* ((project (transient-scope))
@@ -35,7 +35,7 @@
            (append (list "-S" source-dir "-B" (plist-get project :binary-dir))
                    expanded-args))))
 
-(transient-define-suffix teamake-configure--configure-preset ()
+(transient-define-suffix teamake-configure--execute-preset ()
   :description "Configure preset"
   (interactive)
   (let* ((project (transient-scope))
@@ -358,9 +358,9 @@ Use current configure preset as base for preset specific expansions."
     :choices ("ERROR" "WARNING" "NOTICE" "STATUS" "VERBOSE" "DEBUG" "TRACE"))
    ]
   [
-   ["Do"
-    ("xx" "Execute current" teamake-configure--configure-current)
-    ("xp" "Execute preset" teamake-configure--configure-preset)
+   ["Configure"
+    ("xx" "Current" teamake-configure--execute-current)
+    ("xp" "Preset" teamake-configure--execute-preset)
     ]
    ["Navigate"
     ("C" teamake-project--teamake-cmake-navigate)
