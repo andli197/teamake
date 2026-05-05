@@ -8,13 +8,41 @@
 (require 'teamake-preset)
 (require 'teamake-process)
 
+(defun teamake-build--string (project)
+  "Display current build command for PROJECT."
+  (propertize
+   (format "cmake --build %s %s"
+           (plist-get project :binary-dir)
+           "<options>")
+   'face
+   'teamake-cmake-command))
+
+(defun teamake-cmake-build-current (project)
+  "Run build with current values for PROJECT."
+  (unless (teamake--project-has-valid-binary-dir-p project)
+    (user-error "Unable to build.  No valid binary dir was specified"))
+  (apply #'teamake-process-invoke-cmake
+         project
+         (append (list "--build" (plist-get project :binary-dir))
+                 (teamake-get-current-values 'teamake-build project))))
+
+(defun teamake-cmake-build-preset (project)
+  "Run build with current preset for PROJECT."
+  (let* ((preset (teamake-preset--get-current-build-preset project))
+         (preset-name (plist-get preset :name)))
+    (unless preset-name
+      (error "Unable to build.  No preset was provided"))
+    (teamake-process-invoke-cmake project
+                                  "--build"
+                                  (format "--preset=%s" preset-name))))
+
 (defun teamake-build--read-build-targets (project)
   "Read available build targets from PROJECT.
 
 Assuming the generator can provide available targets using the 'help'
 target in the binary dir."
-  (unless (plist-member project :binary-dir)
-    (user-error "Unable to read build targets since no binary dir specified"))
+  (unless (teamake--project-has-valid-binary-dir-p project)
+    (user-error "Unable to build.  No valid binary dir was specified"))
   (let ((targets '()))
     (seq-do
      (lambda (line)
@@ -53,56 +81,40 @@ target in the binary dir."
               (plist-get preset :nativeToolOptions)))
     values))
 
+(defun teamake-build--expand-macro-in-current-value (value project)
+  "Replace any macro expressions in VALUE for PROJECT.
+
+Use current build preset as base for preset specific expansions."
+  (teamake-expand-expression
+   value
+   (plist-get project :source-dir)
+   (lambda (text source-dir)
+     (teamake-preset--expand-macro
+      text (teamake-preset--get-current-build-preset project) source-dir))))
+
 (transient-define-suffix teamake-build--select-preset ()
-  :description "Read from preset"
   (interactive)
   (let* ((project (transient-scope))
          (preset (teamake-preset-select-build project))
-         (values (teamake-build--preset-to-values preset)))
+         (raw-values (teamake-build--preset-to-values preset))
+         (values (seq-map (lambda (value)
+                            (teamake-build--expand-macro-in-current-value value project))
+                          raw-values)))
     (teamake-set-current-values 'teamake-build project values)
-    (transient-setup 'teamake-build '() '()
-                     :scope project
-                     :value values)))
+    (teamake-setup-transient 'teamake-build project)))
 
 (transient-define-suffix teamake-build--execute-current ()
   (interactive)
   (let* ((project (transient-scope))
-         (current-args (transient-args 'teamake-build))
-         (expanded-args (seq-map
-                         (lambda (value)
-                           (teamake-build--expand-macro-in-current-value value project))
-                         current-args)))
+         (current-args (transient-args 'teamake-build)))
     (teamake-set-current-values 'teamake-build project current-args)
-    (apply #'teamake-process-invoke-cmake
-           project
-           "--build"
-           (plist-get project :binary-dir)
-           expanded-args)))
+    (teamake-cmake-build-current project)))
 
 (transient-define-suffix teamake-build--execute-preset ()
   (interactive)
-  (let* ((project (transient-scope))
-         (preset (teamake-preset-select-build project)))
-    (apply #'teamake-process-invoke-cmake
-           project
-           "--build"
-           (plist-get project :binary-dir)
-           (format "--preset=%s" (plist-get preset :name)))))
-
-(transient-define-suffix teamake-build--native-tool-option ()
-  :description
-  (lambda ()
-    (let ((text "Native tool option")
-          (option "--")
-          (value '()))
-      (format "%s (%s)"
-              text
-              (if value (propertize (format "%s%s" option value) 'face 'transient-value)
-                option))))
-  (interactive)
   (let ((project (transient-scope)))
-    )
-  )
+    (teamake-preset-select-build project)
+    (teamake-cmake-build-preset project)))
 
 (defun teamake-build--possible (project)
   "Determine if PROJECT contain enough information for `teamake-build'."
@@ -121,12 +133,10 @@ target in the binary dir."
      (format "%s %s\n\n%s\n"
              (propertize "CMake Build" 'face 'teamake-heading)
              (propertize (plist-get (transient-scope) :name) 'face 'teamake-project-name)
-             (propertize (format "cmake --build %s\n      <options>"
-                                 (plist-get (transient-scope) :binary-dir))))
-     )
+             (teamake-build--string (transient-scope))))
    ["Options"
     ("cfg" teamake-transient--configuration)
-    ("pr" teamake-build--select-preset)
+    ("pr" "Read from preset" teamake-build--select-preset)
     ("pa" "Parallel builds, using this amount of jobs" "--parallel="
      :prompt "Parallel builds: "
      :reader transient-read-number-N+)
