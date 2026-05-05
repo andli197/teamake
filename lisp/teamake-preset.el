@@ -146,12 +146,10 @@ PRESETS is representing all presets and CATEGORY is the preset category to selec
 The selected preset is fused among the inheritance chain and saved as current preset
 for the project, ready to be used."
   (interactive)
-  (teamake-preset--set-current
-   project category
-   (teamake-cmake-select-preset-from-path
-    (plist-get project :source-dir)
-    category
-    (teamake-preset--get-current-configuration-preset-name project))))
+  (let* ((source-dir (plist-get project :source-dir))
+         (configuration (teamake-preset--get-current-configuration-preset-name project))
+         (selection (teamake-cmake-select-preset-from-path source-dir category configuration)))
+    (teamake-preset--set-current project category selection)))
 
 (defun teamake-preset--get-current (project category)
   "Return current CATEGORY from PROJECT."
@@ -193,7 +191,6 @@ for the project, ready to be used."
 
 (defun teamake-preset--get-current-configuration-preset-name (project)
   "Return current configuration preset name from PROJECT."
-  (interactive)
   (plist-get (teamake-preset--get-current-configuration-preset project) :name))
 
 ;; Specific manipulators for presets

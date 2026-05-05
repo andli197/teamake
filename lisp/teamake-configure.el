@@ -7,6 +7,37 @@
 (require 'teamake-process)
 (require 'teamake-preset)
 
+(defun teamake-configure--string (project)
+  "Display current configuration command for PROJECT."
+  (propertize
+   (format "cmake -S %s -B %s %s"
+           (plist-get project :source-dir)
+           (plist-get project :binary-dir)
+           ;;(teamake-get-current-values 'teamake-configure project)
+           "<options>"
+           )
+   'face
+   'teamake-cmake-command))
+
+(defun teamake-cmake-configure-current (project)
+  "Run configuration with current values for PROJECT."
+  (apply #'teamake-process-invoke-cmake
+         project
+         (append (list "-S" (plist-get project :source-dir)
+                       "-B" (plist-get project :binary-dir))
+                 (teamake-get-current-values 'teamake-configure project))))
+
+(defun teamake-cmake-configure-preset (project)
+  "Run configuration with current values for PROJECT."
+  (let* ((presets (plist-get (teamake-get-current-values 'teamake-preset project) :configurePresets))
+         (preset-name (plist-get presets :name)))
+    (unless preset-name
+      (error "Unable to configure using preset since no preset was provided"))
+    (teamake-process-invoke-cmake project
+                                  "-S" (plist-get project :source-dir)
+                                  "--preset="
+                                  preset-name)))
+
 (defun teamake-configure--list-generators ()
   "List all generators supported by CMake binary."
   (let* ((output (teamake-cmake-command-to-string "--help"))
@@ -21,7 +52,6 @@
       (setq generators (reverse generators)))))
 
 (transient-define-suffix teamake-configure--execute-current ()
-  :description "Configure current"
   (interactive)
   (let* ((project (transient-scope))
          (current-args (transient-args 'teamake-configure))
@@ -31,28 +61,20 @@
                            (teamake-configure--expand-macro-in-current-value value project))
                          current-args)))
     (teamake-set-current-values 'teamake-configure project current-args)
-    (apply #'teamake-process-invoke-cmake
-           (append (list "-S" source-dir "-B" (plist-get project :binary-dir))
-                   expanded-args))))
+    (teamake-cmake-configure-current project)))
 
 (transient-define-suffix teamake-configure--execute-preset ()
-  :description "Configure preset"
   (interactive)
   (let* ((project (transient-scope))
          (preset (teamake-preset-select-configuration project)))
-    (apply #'teamake-process-invoke-cmake
-           project
-           "-S"
-           (plist-get project :source-dir)
-           (format "--preset=%s" (plist-get preset :name)))))
+    (teamake-cmake-configure-preset project)))
 
 (transient-define-suffix teamake-configure--save-current ()
   "Save the current configure as current for later use."
   (interactive)
   (let ((project (transient-scope))
         (values (transient-args 'teamake-configure)))
-    (teamake-set-current-values 'teamake-configure project values)
-    (teamake-save-project project)))
+    (teamake-set-current-values 'teamake-configure project values)))
 
 (transient-define-suffix teamake-configure--save-current-as ()
   "Save the current configure as current for later use."
@@ -197,15 +219,15 @@ Use current configure preset as base for preset specific expansions."
       text (teamake-preset--get-current project :configurePresets) source-dir))))
 
 (transient-define-suffix teamake-configure--select-preset ()
-  :description "Read from preset"
   (interactive)
   (let* ((project (transient-scope))
          (preset (teamake-preset-select-configuration project))
-         (values (teamake-configure--preset-to-values preset)))
+         (raw-values (teamake-configure--preset-to-values preset))
+         (values (seq-map (lambda (value)
+                            (teamake-configure--expand-macro-in-current-value value project))
+                          raw-values)))
     (if (plist-member preset :binaryDir)
-        (plist-put project :binary-dir
-                   (teamake-configure--expand-macro-in-current-value
-                    (plist-get preset :binaryDir) project)))
+        (plist-put project :binary-dir (transient-arg-value "-B=" values)))
     (teamake-set-current-values 'teamake-configure project values)
     (teamake-setup-transient 'teamake-configure project)))
 
@@ -243,11 +265,7 @@ Use current configure preset as base for preset specific expansions."
      (format "%s %s\n\n%s\n"
              (propertize "CMake Configure" 'face 'teamake-heading)
              (propertize (plist-get (transient-scope) :name) 'face 'teamake-project-name)
-             (propertize (format "cmake -S %s\n      -B %s \n      <options>"
-                                 (plist-get (transient-scope) :source-dir)
-                                 (plist-get (transient-scope) :binary-dir))
-                         'face 'teamake-cmake-command))
-     )
+             (teamake-configure--string (transient-scope))))
    ["Options"
     ("b" teamake-configure--binary-dir)
     (5 "C" "Pre-load a script to populate the cache" "-C"
@@ -271,7 +289,7 @@ Use current configure preset as base for preset specific expansions."
     ("i" " Installation path" "--install-prefix="
      :prompt "Install path: "
      :reader transient-read-directory)
-    ("pr" teamake-configure--select-preset)
+    ("pr" "Read from preset" teamake-configure--select-preset)
     ("gr" "Generate graphviz of dependencies"
      "--graphviz="
      :prompt "Graphviz output: "
