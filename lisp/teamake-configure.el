@@ -28,15 +28,14 @@
                  (teamake-get-current-values 'teamake-configure project))))
 
 (defun teamake-cmake-configure-preset (project)
-  "Run configuration with current values for PROJECT."
+  "Run configuration with current preset for PROJECT."
   (let* ((presets (plist-get (teamake-get-current-values 'teamake-preset project) :configurePresets))
          (preset-name (plist-get presets :name)))
     (unless preset-name
-      (error "Unable to configure using preset since no preset was provided"))
+      (error "Unable to configure.  No preset was selected"))
     (teamake-process-invoke-cmake project
                                   "-S" (plist-get project :source-dir)
-                                  "--preset="
-                                  preset-name)))
+                                  (format "--preset=%s" preset-name))))
 
 (defun teamake-configure--list-generators ()
   "List all generators supported by CMake binary."
@@ -65,8 +64,8 @@
 
 (transient-define-suffix teamake-configure--execute-preset ()
   (interactive)
-  (let* ((project (transient-scope))
-         (preset (teamake-preset-select-configuration project)))
+  (let ((project (transient-scope)))
+    (teamake-preset-select-configuration project)
     (teamake-cmake-configure-preset project)))
 
 (transient-define-suffix teamake-configure--save-current ()
