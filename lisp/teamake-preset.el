@@ -149,7 +149,8 @@ for the project, ready to be used."
   (let* ((source-dir (plist-get project :source-dir))
          (configuration (teamake-preset--get-current-configuration-preset-name project))
          (selection (teamake-cmake-select-preset-from-path source-dir category configuration)))
-    (teamake-preset--set-current project category selection)))
+    (teamake-preset--set-current project category selection)
+    selection))
 
 (defun teamake-preset--get-current (project category)
   "Return current CATEGORY from PROJECT."
