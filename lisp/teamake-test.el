@@ -7,6 +7,34 @@
 (require 'teamake-process)
 (require 'teamake-preset)
 
+(defun teamake-test--string (project)
+  "Display current test command for PROJECT."
+  (propertize
+   (format "ctest --test-dir %s %s"
+           (plist-get project :binary-dir)
+           "<options>"
+           )
+   'face 'teamake-cmake-command))
+
+(defun teamake-cmake-test-current (project)
+  "Run test with current values for PROJECT."
+  (unless (teamake--project-has-valid-binary-dir-p project)
+    (user-error "Unable to test.  No valid binary dir was specified"))
+  (apply #'teamake-process-invoke-ctest
+         project
+         (append (list "--test-dir" (plist-get project :binary-dir)
+                       "--config")
+                 (teamake-get-current-values 'teamake-test project))))
+
+(defun teamake-cmake-test-preset (project)
+  "Run test with current preset for PROJECT."
+  (let* ((preset (teamake-preset--get-current-test-preset project))
+         (preset-name (plist-get preset :name)))
+    (unless preset-name
+      (user-error "Unable to test.  No preset was provided"))
+    (teamake-process-invoke-ctest project
+                                  (format "--preset=%s" preset-name))))
+
 (transient-define-suffix teamake-test--execute-current ()
   "Execute the currently test command."
   (interactive)
@@ -19,20 +47,13 @@
              (teamake-test--expand-macro-in-current-value value project))
            current-args)))
     (teamake-set-current-values 'teamake-test project current-args)
-    (apply #'teamake-process-invoke-ctest
-           project
-           "--test-dir"
-           source-dir
-           expanded-args)))
+    (teamake-cmake-test-current project)))
 
-(transient-define-suffix teamake-test--test-preset ()
+(transient-define-suffix teamake-test--execute-preset ()
   (interactive)
-  (let* ((project (transient-scope))
-         (preset (teamake-preset-select-from-project project :testPresets)))
-    (teamake-process-invoke-ctest
-     project
-     (format "--preset=%s" (plist-get preset :name)))))
-
+  (let* ((project (transient-scope)))
+    (teamake-preset-select-test project)
+    (teamake-cmake-test-preset project)))
 
 (defun teamake-test--preset-to-values (preset)
   "Parse all values from PRESET into values for `teamake-test'."
@@ -49,7 +70,8 @@
             (if (plist-member output :verbosity)
                 (cond ((string= (plist-get output :verbosity) "verbose") (add-to-list 'values "--verbose"))
                       ((string= (plist-get output :verbosity) "extra") (add-to-list 'values "--extra-verbose"))))
-            (if (not (eq (plist-get output :debug) :json-false))
+            (if (and (plist-member output :debug)
+                     (not (eq (plist-get output :debug) :json-false)))
                 (add-to-list 'values "--debug"))
             (if (eq (plist-get output :outputOnFailure) t)
                 (add-to-list 'values "--output-on-failure"))
@@ -149,12 +171,20 @@
           (if (and (plist-member execution :noTestsAction)
                    (not (string= (plist-get execution :noTestsAction) "default")))
               (add-to-list 'values (format "--no-tests=%s" (plist-get execution :noTestsAction))))
-          )
-      )
-    values
-    )
-  )
+          ))
+    values))
 
+(transient-define-suffix teamake-test--select-preset ()
+  (interactive)
+  (let* ((project (transient-scope))
+         (preset (teamake-preset-select-test project))
+         (raw-values (teamake-test--preset-to-values preset))
+         (values (seq-map
+                  (lambda (value)
+                    (teamake-test--expand-macro-in-current-value value project))
+                  raw-values)))
+    (teamake-set-current-values 'teamake-test project values)
+    (teamake-setup-transient 'teamake-test project)))
 
 (defun teamake-test--expand-macro-in-current-value (value project)
   "Replace any macro expressions in VALUE for PROJECT.
@@ -178,73 +208,148 @@ Use current test preset as base for preset specific expansions."
     (user-error "Project not correctly configured with binary dir"))
   (teamake-setup-transient 'teamake-test project))
 
+(defun teamake-test--find-repeat (values)
+  "Find the value associated with \"--repeat\" among VALUES."
+  (let ((value (seq-find (lambda (e) (string-match "--repeat" e)) values)))
+    (if value
+        (save-match-data
+          (string-match "--repeat \\(.+\\):\\(.+\\)" value)
+          (list :mode (match-string 1 value)
+                :amount (match-string 2 value))))))
+
+(transient-define-suffix teamake-test--repeat ()
+  "Select how tests are to be repeated"
+  :description
+  (lambda ()
+    (let* ((values (teamake-get-current-values 'teamake-test (transient-scope)))
+           (text "Repeat")
+           (option "--repeat")
+           (value (teamake-test--find-repeat values)))
+      (format "%s (%s)" text (if value
+                                 (propertize (format "%s %s:%s"
+                                                     option
+                                                     (plist-get value :mode)
+                                                     (plist-get value :amount))
+                                             'face 'transient-value)
+                               option))
+      ))
+  (interactive)
+  (let* ((project (transient-scope))
+         (mode (completing-read "Mode: " '("until-pass" "until-fail" "after-timeout") '() t))
+         (amount (read-number "Times: "))
+         (current (teamake-get-current-values 'teamake-test project)))
+
+    (message "before: %s" current)
+    ;; quick and dirty way, keep all values
+    (add-to-list 'current (format "--repeat %s:%s" mode amount))
+    (message "after: %s" current)
+    (teamake-set-current-values 'teamake-test project current)
+    (teamake-setup-transient 'teamake-test project)
+  ))
+
 (transient-define-prefix teamake-test (project)
   [:description
    (lambda ()
      (format "%s %s\n\n%s\n"
              (propertize "CMake Test" 'face 'teamake-heading)
              (propertize (plist-get (transient-scope) :name) 'face 'teamake-project-name)
-             (propertize (format "ctest --test-dir %s\n      <options>"
-                                 (plist-get (transient-scope) :binary-dir))))
+             (teamake-test--string (transient-scope)))
      )
-   ["Commands"
+   ["Misc"
     ("cfg" teamake-transient--configuration)
-    ("lr" "Run tests with labels matching regular expression"
-     "--label-regex="
-     :prompt "Labels include regex: ")
-    ("le" "Exclude tests with labels matching regular expression"
-     "--label-exclude="
-     :prompt "Label exclude regex: ")
+    ("pr" "Read from preset" teamake-test--select-preset)
+    ]
+   ]
+  ["Filter"
+   ["Include"
     ("tr" "Run tests matching regular expression"
      "--tests-regex="
      :prompt "Test include regex: ")
+    ("lr" "Run tests with labels matching regular expression"
+     "--label-regex="
+     :prompt "Labels include regex: ")
+    ("u" "Take the union of --tests-information and --tests-regex" "--union")]
+   ["Exclude"
     ("te" "Exclude tests matching regular expression"
      "--exclude-regex="
      :prompt "Test exclude regex: ")
-    ("to" "Set the default test timeout"
-     "--timeout="
-     :prompt "Time in seconds: "
-     :reader transient-read-number-N+)
-    ("uf" "Require each test to run <n> times without failing in order to pass"
-     "--repeat until-fail="
-     :prompt "Repeat until fail: "
-     :reader transient-read-number-N+)
-    ("up" "Allow each test to run up to <n> times in order to pass"
-     "--repeat until-pass="
-     :prompt "Allow repeat: "
-     :reader transient-read-number-N+)
+    ("le" "Exclude tests with labels matching regular expression"
+     "--label-exclude="
+     :prompt "Label exclude regex: ")
+    ("fa" "Exclude fixtures matching" "--fixture-exclude-any"
+     :class transient-option
+     :prompt "Exclude fixtured matching regex: ")
+    ("fs" "Exclude setup matching" "--fixture-exclude-setup"
+     :class transient-option
+     :prompt "Exclude setup matching regex: ")
+    ("fc" "Exclude cleanup matching" "--fixture-exclude-cleanup"
+     :class transient-option
+     :prompt "Exclude cleanup matching regex: ")
     ]
    ]
-  ["Flags"
-   ("-d" "Displaying more verbose internals of CTest"
-    "--debug")
-   ("-p" "Enable short progress output from tests"
-    "--progress")
-   ("-v" "Enable verbose output from tests"
-    "--verbose")
-   ("-V" "Enable more verbose output from tests"
-    "--extra-verbose")
-   ("-o" "Output anything outputted by the test program if the test should fail."
-    "--output-on-failure")
-   ("-s" "Stop running the tests after one has failed"
-    "--stop-on-failure")
-   ("-q" "Make ctest quiet"
-    "--quiet")
-   ("-N" "Disable actual execution of tests"
-    "--show-only")
-   ("-r" "Run only the tests that failed previously"
-    "--rerun-failed")
-   ("-n" "Disable timing summary information for labels"
-    "--no-label-summary")
-   ("-n" "Disable timing summary information for subprojects"
-    "--no-subproject-summary")
-   ("-f" "Run child CTest instances as new processes"
-    "--force-new-ctest-process")
-   ("-r" "Use a random order for scheduling tests"
-    "--schedule-random")
-   ("-p" "Print all available test labels"
-    "--print-labels")
+  ["Execution"
+   ("sof" "Stop running the tests when the first failure happens" "--stop-on-failure")
+   ("F" "Enable failover" "-F")
+   ("pa" "Run tests in parallel (jobs)" ("-j" "--parallel")
+    :class transient-option
+    :prompt "Parallel jobs: "
+    :reader transient-read-number-N+)
+   ("rsf" "Run CTest with resource allocation enabled" "--resource-spec-file"
+    :class transient-option
+    :prompt "Resource specification file: "
+    :reader transient-read-file)
+   ("tl" "CPU threshold for when executing in parallel" "--test-load"
+    :class transient-option
+    :prompt "Load theshold: "
+    :reader transient-read-number-N+)
+   ("show" "Do not execute tests, only show" "--show-only"
+    :class transient-option
+    :prompt "Select format: "
+    :choices '("human" "json-v1"))
+   ("rep" teamake-test--repeat)
+   ("i" "Interactive debug mode" "--interactive-debug-mode")
+   ("s" "Use a random order for scheduling tests" "--schedule-random")
+   ("to" "Set the default test timeout" "--timeout"
+    :class transient-option
+    :prompt "Timeout (s): "
+    :reader transient-read-number-N+)
    ]
+  ["Output"
+    ("-p" "Enable short progress output from tests"
+     "--progress")
+    ("-v" "Enable verbose output from tests"
+     "--verbose")
+    ("-V" "Enable more verbose output from tests"
+     "--extra-verbose")
+    ("-d" "Displaying more verbose internals of CTest"
+    "--debug")
+    ("-o" "Output anything outputted by the test program if the test should fail."
+     "--output-on-failure")
+    ("-s" "Stop running the tests after one has failed"
+     "--stop-on-failure")
+    ("-q" "Make ctest quiet"
+     "--quiet")
+    ("o" "Output to log file" ("-o" "--output-log")
+     :class transient-option
+     :prompt "Log file: "
+     :reader transient-read-file)
+    ("-n" "Disable timing summary information for labels"
+     "--no-label-summary")
+    ("-n" "Disable timing summary information for subprojects"
+     "--no-subproject-summary")
+    ("top" "Test output size passed" "--test-output-size-passed"
+     :class transient-option
+     :prompt "Byte size to limit output for passed tests: "
+     :reader transient-read-number-N+)
+    ("tof" "Test output size failed" "--test-output-size-failed"
+     :class transient-option
+     :prompt "Byte size to limit output for failed tests: "
+     :reader transient-read-number-N+)
+    ("mw" "Set the max width for a test name to output" "--max-width"
+     :class transient-option
+     :prompt "Max width: "
+     :reader transient-read-number-N+)
+    ]
   [
    ["Test"
     ("xx" "Current" teamake-test--execute-current)

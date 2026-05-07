@@ -13,7 +13,6 @@
    (format "cmake -S %s -B %s %s"
            (plist-get project :source-dir)
            (plist-get project :binary-dir)
-           ;;(teamake-get-current-values 'teamake-configure project)
            "<options>"
            )
    'face
@@ -393,12 +392,12 @@ Use current configure preset as base for preset specific expansions."
     ("xl" "Load"    teamake-transient-load)
     ("xd" "Delete"  teamake-transient-delete :transient t)
     ]
-   ["Templates"
-    ("gc" "Save"    teamake-transient-save-current-values :transient t)
-    ("ga" "Save as" teamake-transient-save-current-as :transient t)
-    ("gl" "Load"    teamake-transient-load)
-    ("gd" "Delete"  teamake-transient-delete :transient t)
-    ]
+   ;; ["Templates"
+   ;;  ("gc" "Save"    teamake-transient-save-current-values :transient t)
+   ;;  ("ga" "Save as" teamake-transient-save-current-as :transient t)
+   ;;  ("gl" "Load"    teamake-transient-load)
+   ;;  ("gd" "Delete"  teamake-transient-delete :transient t)
+   ;;  ]
    ]
   (interactive
    (list (teamake-project-from-source-dir
