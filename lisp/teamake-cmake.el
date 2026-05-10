@@ -5,6 +5,13 @@
 (require 'json)
 (require 'teamake-core)
 
+(defun teamake-cmake--parse-json (string)
+  "Parse STRING as json."
+  (let ((json-object-type 'plist)
+        (json-array-type 'list)
+        (json-key-type 'keyword))
+    (json-read-from-string string)))
+
 (defun teamake-preset--read-json-file (preset-file)
   "Read the file specified by PRESET-FILE as a CMakePresets.json file.
 

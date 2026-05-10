@@ -46,7 +46,7 @@
            (lambda (value)
              (teamake-test--expand-macro-in-current-value value project))
            current-args)))
-    (teamake-set-current-values 'teamake-test project current-args)
+    (teamake-set-current-values 'teamake-test project expanded-args)
     (teamake-cmake-test-current project)))
 
 (transient-define-suffix teamake-test--execute-preset ()
@@ -183,7 +183,7 @@
                   (lambda (value)
                     (teamake-test--expand-macro-in-current-value value project))
                   raw-values)))
-    (teamake-set-current-values 'teamake-test project values)
+    (teamake-set-current-values 'teamake-test project raw-values)
     (teamake-setup-transient 'teamake-test project)))
 
 (defun teamake-test--expand-macro-in-current-value (value project)
@@ -225,24 +225,26 @@ Use current test preset as base for preset specific expansions."
            (text "Repeat")
            (option "--repeat")
            (value (teamake-test--find-repeat values)))
-      (format "%s (%s)" text (if value
-                                 (propertize (format "%s %s:%s"
-                                                     option
-                                                     (plist-get value :mode)
-                                                     (plist-get value :amount))
-                                             'face 'transient-value)
-                               option))
-      ))
+      (format "%s (%s)" text
+              (if value
+                  (propertize (format "%s %s:%s"
+                                      option
+                                      (plist-get value :mode)
+                                      (plist-get value :amount))
+                              'face 'transient-value)
+                option))))
   (interactive)
   (let* ((project (transient-scope))
          (mode (completing-read "Mode: " '("until-pass" "until-fail" "after-timeout") '() t))
          (amount (read-number "Times: "))
-         (current (teamake-get-current-values 'teamake-test project)))
-
-    (message "before: %s" current)
-    ;; quick and dirty way, keep all values
+         (current (transient-args 'teamake-test)))
+    (message "current: %s"  current)
+    (setq current (seq-filter
+                   (lambda (i)
+                     (not (string-match "--repeat" i)))
+                   current))
     (add-to-list 'current (format "--repeat %s:%s" mode amount))
-    (message "after: %s" current)
+    
     (teamake-set-current-values 'teamake-test project current)
     (teamake-setup-transient 'teamake-test project)
   ))
@@ -288,28 +290,28 @@ Use current test preset as base for preset specific expansions."
     ]
    ]
   ["Execution"
-   ("sof" "Stop running the tests when the first failure happens" "--stop-on-failure")
+   ;; ("sof" "Stop running the tests when the first failure happens" "--stop-on-failure")
    ("F" "Enable failover" "-F")
-   ("pa" "Run tests in parallel (jobs)" ("-j" "--parallel")
+   ("pa" "Run tests in parallel (jobs)" "--parallel "
     :class transient-option
     :prompt "Parallel jobs: "
     :reader transient-read-number-N+)
-   ("rsf" "Run CTest with resource allocation enabled" "--resource-spec-file"
+   ("rsf" "Run CTest with resource allocation enabled" "--resource-spec-file "
     :class transient-option
     :prompt "Resource specification file: "
     :reader transient-read-file)
-   ("tl" "CPU threshold for when executing in parallel" "--test-load"
+   ("tl" "CPU threshold for when executing in parallel" "--test-load "
     :class transient-option
     :prompt "Load theshold: "
     :reader transient-read-number-N+)
-   ("show" "Do not execute tests, only show" "--show-only"
+   ("show" "Do not execute tests, only show" "--show-only "
     :class transient-option
     :prompt "Select format: "
-    :choices '("human" "json-v1"))
+    :choices ("human" "json-v1"))
    ("rep" teamake-test--repeat)
    ("i" "Interactive debug mode" "--interactive-debug-mode")
-   ("s" "Use a random order for scheduling tests" "--schedule-random")
-   ("to" "Set the default test timeout" "--timeout"
+   ("rand" "Use a random order for scheduling tests" "--schedule-random")
+   ("tio" "Set the default test timeout" "--timeout "
     :class transient-option
     :prompt "Timeout (s): "
     :reader transient-read-number-N+)
@@ -325,11 +327,9 @@ Use current test preset as base for preset specific expansions."
     "--debug")
     ("-o" "Output anything outputted by the test program if the test should fail."
      "--output-on-failure")
-    ("-s" "Stop running the tests after one has failed"
-     "--stop-on-failure")
     ("-q" "Make ctest quiet"
      "--quiet")
-    ("o" "Output to log file" ("-o" "--output-log")
+    ("o" "Output to log file" "--output-log "
      :class transient-option
      :prompt "Log file: "
      :reader transient-read-file)
@@ -337,15 +337,15 @@ Use current test preset as base for preset specific expansions."
      "--no-label-summary")
     ("-n" "Disable timing summary information for subprojects"
      "--no-subproject-summary")
-    ("top" "Test output size passed" "--test-output-size-passed"
+    ("top" "Test output size passed" "--test-output-size-passed "
      :class transient-option
      :prompt "Byte size to limit output for passed tests: "
      :reader transient-read-number-N+)
-    ("tof" "Test output size failed" "--test-output-size-failed"
+    ("tof" "Test output size failed" "--test-output-size-failed "
      :class transient-option
      :prompt "Byte size to limit output for failed tests: "
      :reader transient-read-number-N+)
-    ("mw" "Set the max width for a test name to output" "--max-width"
+    ("mw" "Set the max width for a test name to output" "--max-width "
      :class transient-option
      :prompt "Max width: "
      :reader transient-read-number-N+)
@@ -371,6 +371,18 @@ Use current test preset as base for preset specific expansions."
           (source-dir (teamake-cmake-cache--get-source-dir binary-dir)))
      (list (teamake-project-from-source-dir-or-create source-dir))))
   (teamake-setup-transient 'teamake-test project))
+
+
+;; Missing options:
+;; --output-junit <file>
+;; Added in version 3.21.
+
+;; Write test results in JUnit format.
+
+;; This option tells CTest to write test results to <file> in JUnit XML format. If <file> already exists, it will be overwritten. If using the -S option to run a dashboard script, use the OUTPUT_JUNIT keyword with the ctest_test() command instead.
+
+
+
 
 (provide 'teamake-test)
 ;;; teamake-test.el ends here

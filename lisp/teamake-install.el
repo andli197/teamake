@@ -9,6 +9,25 @@
 ;;   "Read CMakeCache.txt in BINARY-DIR and deduce all components."
 ;;   )
 
+(defun teamake-install--string (project)
+  "Display current install command for PROJECT."
+  (propertize
+   (format "cmake --install %s %s"
+           (plist-get project :binary-dir)
+           "<options>")
+   'face
+   'teamake-cmake-command))
+
+(defun teamake-cmake-install-current (project)
+  "Run build with current values for PROJECT."
+  (unless (teamake--project-has-valid-binary-dir-p project)
+    (user-error "Unable to install.  No valid binary dir was specified"))
+
+  (apply #'teamake-process-invoke-cmake
+         project
+         (append (list "--install" (plist-get project :binary-dir))
+                 (teamake-get-current-values 'teamake-install project))))
+
 (defun teamake-install--possible (project)
   "Determine if PROJECT contain enough information for `teamake-install'."
   (teamake--project-has-valid-binary-dir-p project))
@@ -24,10 +43,7 @@
   (let* ((project (transient-scope))
          (values (transient-args 'teamake-install)))
     (teamake-set-current-values 'teamake-install project values)
-    (apply #'teamake-process-invoke-cmake
-           project
-           (append (list "--install" (plist-get binary-dir :binary-dir)) values)
-           )))
+    (teamake-cmake-install-current project)))
 
 (transient-define-prefix teamake-install (project)
   [:description
@@ -35,8 +51,7 @@
      (format "%s %s\n\n%s\n"
              (propertize "CMake Install" 'face 'teamake-heading)
              (propertize (plist-get (transient-scope) :name) 'face 'teamake-project-name)
-             (propertize (format "cmake --install %s\n      <options>"
-                                 (plist-get (transient-scope) :binary-dir))))
+             (teamake-install--string (transient-scope)))
      )
   ["Options"
    ("cfg" teamake-transient--configuration)
@@ -44,8 +59,11 @@
    ;; reading the global target "list_install_components". For versions lower than 4.0 we can try
    ;; to parse the cmake_install.cmake to fetch all components.
    ("co" "Component-based install. Only install selected component(s)" "--component="
-    :prompt "Component: ")
+    :class transient-option
+    :prompt "Component: "
+    :multi-value repeat)
    ("pe" "Default directory install permissions" "--default-directory-permissions"
+    :class transient-option
     :prompt "Permissions in format <u=rwx,g=rx,o=rx>: ")
    ("pa" "Specifies an alternative installation prefix" "--prefix="
     :prompt "Installation: "

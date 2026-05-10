@@ -2,12 +2,17 @@
 ;;; Commentary:
 ;;; Code:
 
+
 (require 'transient)
-(require 'teamake-cmake)
+
 (require 'teamake-core)
+(require 'teamake-process)
+(require 'teamake-cmake)
 (require 'teamake-configure)
 (require 'teamake-build)
+(require 'teamake-test)
 (require 'teamake-install)
+(require 'teamake-package)
 (require 'teamake-preset)
 
 ;; Display and select project

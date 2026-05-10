@@ -256,6 +256,31 @@ Use current configure preset as base for preset specific expansions."
     (plist-put project :binary-dir binary-dir)
     (teamake-setup-transient 'teamake-configure project)))
 
+(transient-define-suffix teamake-configure--generator ()
+  :transient 'transient--do-recurse
+  :description
+  (lambda ()
+    (let ((project (transient-scope))
+          (text "Generator")
+          (option "-G="))
+      (format "%s (%s)"
+              text
+              (if (plist-member project :generator)
+                  (propertize (format "%s%s" option (plist-get project :generator))
+                              'face 'transient-value)
+                option))))
+  (interactive)
+  (let ((project (transient-scope)))
+    (plist-put project :generator
+               (completing-read
+                "Generator: "
+                (seq-map (lambda (generator)
+                           (plist-get generator :name))
+                         (plist-get (teamake-cmake--parse-json
+                                     (teamake-cmake-command-to-string "-E" "capabilities"))
+                                    :generators))
+                '() t))))
+
 ;;;###autoload
 (transient-define-prefix teamake-configure (project)
   [:description
@@ -266,7 +291,7 @@ Use current configure preset as base for preset specific expansions."
              (teamake-configure--string (transient-scope))))
    ["Options"
     ("b" teamake-configure--binary-dir)
-    (5 "C" "Pre-load a script to populate the cache" "-C"
+    ("C" "Pre-load a script to populate the cache" "-C"
      :class transient-option
      :prompt "Select script for cache varmup: "
      :reader transient-read-file)
@@ -274,12 +299,11 @@ Use current configure preset as base for preset specific expansions."
      :class transient-option
      :prompt "List entries as <var>[:<type>]=<value> and comma separate them: "
      :multi-value repeat)
-    ("ge" "Generator" "-G="
-     :prompt "Generator: "
-     :choices (lambda () (teamake-configure--list-generators)))
+    ("ge" teamake-configure--generator)
+    ;; toolset and platform should be enabled/disabled when selecting generator
     ("ts" "Specify toolset name if supported by generator" "-T="
      :prompt "Toolset: ")
-    ("a" " Specify platform name if supported by generator" "-A="
+    ("pl" " Specify platform name if supported by generator" "-A="
      :prompt "Platform: ")
     ("tc" "Toolchain file" "--toolchain="
      :prompt "Toolchain: "
@@ -295,63 +319,64 @@ Use current configure preset as base for preset specific expansions."
     ]
    ]
   [
-   ["Warnings"
-    ("-ww" "Enable developer warnings" "-Wdev")
-    ("-wW" "Suppress developer warnings" "-Wno-dev")
-    ("-wd" "Enable deprecation warnings" "-Wdeprecated")
-    ("-wD" "Suppress deprecation warnings" "-Wno-deprecated")
-    ("-we" "Make developer warnings errors" "-Werror=dev")
-    ("-wE" "Make developer warnings not errors" "-Wno-error=dev")
-    ("-wm" "Make deprecated macro and function warnings errors"  "-Werror=deprecated")
-    ("-wM" "Make deprecated macro and function warnings not errors" "-Wno-error=deprecated")
+   ["Warning"
+    ("-ww" "Enable developer warnings"                         "-Wdev")
+    ("-wW" "Suppress developer warnings"                       "-Wno-dev")
+    ("-wd" "Enable deprecation warnings"                       "-Wdeprecated")
+    ("-wD" "Suppress deprecation warnings"                     "-Wno-deprecated")
+    ("-wu" "Warn about uninitialized values"                   "--warn-uninitialized")
+    ("-wc" "Don't warn about command line options"             "--no-warn-unused-cli")
+    ("-ws" "Find problems with variable usage in system files" "--check-system-vars")
     ]
-   [5 "Debug"
-    ("-cli" "Don't warn about command line options"
-     "--no-warn-unused-cli")
-    ("-csv" "Find problems with variable usage in system files"
-     "--check-system-vars")
-    ("-cne" "Compile no warnings as error"
-     "--compile-no-warning-as-error")
-    ("-lc" " Prepend log messages with context, if given"
-     "--log-context")
-    ("-dt" " Do not delete the try_compile build tree"
-     "--debug-trycompile")
-    ("-do" " Put cmake in a debug mode"
-     "--debug-output")
-    ("-df" " Put cmake find in a debug mode"
-     "--debug-find")
-    ("dfp" " Limit cmake debug-find to the comma-separated list of packages"
-     "--debug-find-pkg="
+   ["Error"
+    ("-ed" "Make developer warnings errors"                         "-Werror=dev")
+    ("-eD" "Make developer warnings not errors"                     "-Wno-error=dev")
+    ("-em" "Make deprecated macro and function warnings errors"     "-Werror=deprecated")
+    ("-eM" "Make deprecated macro and function warnings not errors" "-Wno-error=deprecated")
+    ]
+   ]
+  [
+   ["Debug"
+    ("-do" "Put cmake in a debug mode"                "--debug-output")
+    ("-dt" "Do not delete the try_compile build tree" "--debug-trycompile")
+    ("-df" " Put cmake find in a debug mode"          "--debug-find")
+    ""
+    (5 "-cne" "Compile no warnings as error"                 "--compile-no-warning-as-error")
+    (5 "-lc" " Prepend log messages with context, if given"  "--log-context")
+    (5 "dfp" " Limit cmake debug-find to the comma-separated list of packages"   "--debug-find-pkg="
      :prompt "Packages (comma separated): ")
-    ("dfv" " Limit cmake debug-find to the comma-separated list of result variables"
-     "--debug-find-var="
+    (5 "dfv" " Limit cmake debug-find to the comma-separated list of result variables" "--debug-find-var="
      :prompt "Variables (comma separated): ")
-    ("dsi" " Dump information about this system"
-     "--system-information="
+    (5 "dsi" " Dump information about this system" "--system-information="
      :prompt "Select system dump file: "
+     :reader transient-read-file)
+    ]
+   [6 "Trace"
+    ("-tm" "Put cmake in trace mode"                         "--trace")
+    ("-te" "Put cmake in trace mode with variable expansion" "--trace-expand")
+    ("tf" " Set the output format of the trace"              "--trace-format="
+     :prompt "Format: "
+     :choices ("human" "json-v1"))
+    ("ts" "Trace only this CMake file/module"               "--trace-source="
+     :prompt "CMake file/module: "
+     :multi-value repeat
+     :reader transient-read-file)
+    ("tr" " Redirect trace output to a file instead of stderr"  "--trace-redirect="
+     :prompt "Trace output: "
      :reader transient-read-file)
     ]
    ]
   [
-   [6 "Trace"
-    ("-trm" "Put cmake in trace mode" "--trace")
-    ("-tre" "Put cmake in trace mode with variable expansion"
-     "--trace-expand")
-    ("trf-format" " Set the output format of the trace"
-     "--trace-format="
-     :prompt "Format: "
-     :choices ("human" "json-v1"))
-    ("trs" "Trace only this CMake file/module"
-     "--trace-source="
-     :prompt "CMake file/module: "
-     :multi-value repeat
-     :reader transient-read-file)
-    ("trr" " Redirect trace output to a file instead of stderr"
-     "--trace-redirect="
-     :prompt "Trace output: "
-     :reader transient-read-file)
+   ["Misc"
+    ("-f" "Configure a fresh build tree, removing any existing cache file"
+     "--fresh")
+    ("-n" "View mode only" "-N")
+    ("l" " Set the verbosity of message from CMake files."
+     "--log-level="
+     :prompt "Select log level: "
+     :choices ("ERROR" "WARNING" "NOTICE" "STATUS" "VERBOSE" "DEBUG" "TRACE"))
     ]
-   [6 "Profiling"
+   ["Profiling"
     ("pf" "Output format for profiling CMake scripts"
      "--profiling-format="
      :prompt "Select format: "
@@ -361,17 +386,6 @@ Use current configure preset as base for preset specific expansions."
      :prompt "Select profiling output: "
      :reader transient-read-file)
     ]
-   ]
-  ["Misc"
-   ("-f" "Configure a fresh build tree, removing any existing cache file"
-    "--fresh")
-   ("-n" "View mode only" "-N")
-   ("-u" "Warn about uninitialized values"
-    "--warn-uninitialized")
-   ("l" " Set the verbosity of message from CMake files."
-    "--log-level="
-    :prompt "Select log level: "
-    :choices ("ERROR" "WARNING" "NOTICE" "STATUS" "VERBOSE" "DEBUG" "TRACE"))
    ]
   [
    ["Configure"

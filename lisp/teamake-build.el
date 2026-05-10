@@ -116,6 +116,21 @@ Use current build preset as base for preset specific expansions."
     (teamake-preset-select-build project)
     (teamake-cmake-build-preset project)))
 
+;; (transient-define-suffix teamake-build--native-tool-option ()
+;;   :description
+;;   (lambda ()
+;;     (let ((text "Native tool option")
+;;           (option "--")
+;;           (value '()))
+;;       (format "%s (%s)"
+;;               text
+;;               (if value (propertize (format "%s%s" option value) 'face 'transient-value)
+;;                 option))))
+;;   (interactive)
+;;   (let ((project (transient-scope)))
+;;     )
+;;   )
+
 (defun teamake-build--possible (project)
   "Determine if PROJECT contain enough information for `teamake-build'."
   (teamake--project-has-valid-binary-dir-p project))
@@ -140,14 +155,14 @@ Use current build preset as base for preset specific expansions."
     ("pa" "Parallel builds, using this amount of jobs" "--parallel="
      :prompt "Parallel builds: "
      :reader transient-read-number-N+)
-    ("t" "Build target instead of default targets" "--target="
-     :prompt "Targets: "
-     :choices (lambda () (teamake-build--read-build-targets (transient-scope)))
-     :multi-value repeat)
     ("r" "Restore/resolve package references during build"
      "--resolve-package-references="
      :prompt "Select package restore/resolve: "
      :choices ("on" "only" "off"))
+    ("t" "Build target instead of default targets" "--target="
+     :prompt "Targets: "
+     :choices (lambda () (teamake-build--read-build-targets (transient-scope)))
+     :multi-value repeat)
     ;; ("n" "Native tool option" "--"
     ;;  :class transient-option
     ;;  :prompt "Options: ")

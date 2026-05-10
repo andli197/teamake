@@ -123,6 +123,11 @@ into the variable `teamake-project-configurations'."
               (insert-file-contents teamake-project-configurations-file)
               (read (current-buffer))))))
 
+(defun teamake--visit-project-configurations ()
+  "Visit the `teamake-project-configurations-file'."
+  (interactive)
+  (find-file-existing teamake-project-configurations-file))
+
 ;;;###autoload
 (defun teamake-save-project-configurations ()
   "Save project configurations to file.
@@ -152,10 +157,8 @@ file specified by `teamake-project-configurations-file'."
 
 If the PROJECT matches an existing entry in `teamake-project-configurations'
 it will be updated, otherwise it will be added."
-  (let* ((hr (teamake--human-readable project))
-         (match (seq-find
-                 (lambda (p) (teamake--matching-project-p p project))
-                 teamake-project-configurations)))
+  (let ((match (seq-find (lambda (p) (teamake--matching-project-p p project))
+                         teamake-project-configurations)))
     (if match
         (progn
           (seq-do
@@ -350,9 +353,10 @@ prompt user for input.  A correct binary-dir must contain a CMakeCache.txt file.
 (transient-define-suffix teamake-transient-save-current-values ()
   "Save current values for `transient-current-command' into active project."
   (interactive)
-  (let* ((project (transient-scope))
-         (values (transient-args transient-current-command)))
-    (teamake-set-current-values transient-current-prefix project values)
+  (let ((project (transient-scope))
+        (values (transient-args transient-current-command)))
+    (message "values=%s" values)
+    (teamake-set-current-values transient-current-command project values)
     (teamake-save-project project)))
 
 (transient-define-suffix teamake-transient-save-current-as ()
