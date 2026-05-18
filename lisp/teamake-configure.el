@@ -36,19 +36,6 @@
                                   "-S" (plist-get project :source-dir)
                                   (format "--preset=%s" preset-name))))
 
-(defun teamake-configure--list-generators ()
-  "List all generators supported by CMake binary."
-  (let* ((output (teamake-cmake-command-to-string "--help"))
-         (generators-part (substring output (string-match "Generators" output)))
-         (generator-name-expression "[* ]+\\([ -a-zA-Z0-9=]+?\\)[ \n]?+=")
-         (generators '()))
-    (save-match-data
-      (let ((pos 0))
-        (while (string-match generator-name-expression generators-part pos)
-          (push (match-string 1 generators-part) generators)
-          (setq pos (match-end 0))))
-      (setq generators (reverse generators)))))
-
 (transient-define-suffix teamake-configure--execute-current ()
   (interactive)
   (let* ((project (transient-scope))
@@ -256,30 +243,73 @@ Use current configure preset as base for preset specific expansions."
     (plist-put project :binary-dir binary-dir)
     (teamake-setup-transient 'teamake-configure project)))
 
-(transient-define-suffix teamake-configure--generator ()
-  :transient 'transient--do-recurse
-  :description
-  (lambda ()
-    (let ((project (transient-scope))
-          (text "Generator")
-          (option "-G="))
-      (format "%s (%s)"
-              text
-              (if (plist-member project :generator)
-                  (propertize (format "%s%s" option (plist-get project :generator))
-                              'face 'transient-value)
-                option))))
+(defun teamake-configure--get-capabilities ()
+  "Return the capabilities of installed CMake."
+  (teamake-cmake--parse-json
+   (teamake-cmake-command-to-string "-E" "capabilities")))
+
+(defun teamake-configure--list-generators ()
+  "Return the generator list from capabilities of CMake."
+  (plist-get (teamake-configure--get-capabilities) :generators))
+
+(defun teamake-configure--generator-information (name)
+  "Fetch the generator information from specific generator used in PROJECT."
+  (seq-find
+   (lambda (g) (string= (plist-get g :name) name))
+   (teamake-configure--list-generators)))
+
+(defun teamake-configure--generator-has-platform-support (name)
+  (plist-get (teamake-configure--generator-information name) :platformSupport))
+
+(defun teamake-configure--generator-has-toolset-support (name)
+  (plist-get (teamake-configure--generator-information name) :platformSupport))
+
+(transient-define-suffix teamake-configure--get-generator ()
+  "Return name of current configured generator."
   (interactive)
-  (let ((project (transient-scope)))
-    (plist-put project :generator
-               (completing-read
-                "Generator: "
-                (seq-map (lambda (generator)
-                           (plist-get generator :name))
-                         (plist-get (teamake-cmake--parse-json
-                                     (teamake-cmake-command-to-string "-E" "capabilities"))
-                                    :generators))
-                '() t))))
+  (transient-arg-value "-G=" (transient-args 'teamake-configure)))
+
+(transient-define-suffix teamake-configure--describe-generator ()
+  :transient 'transient--do-call
+  (interactive)
+  (let ((text "Generator")
+        (option "-G=")
+        (value (teamake-configure--get-generator)))
+    (format " %s (%s)" text
+            (if value (propertize (format "%s%s" option value) 'face 'transient-value)
+              option))))
+            
+
+(transient-define-infix teamake-configure--generator ()
+  :class 'transient-option
+  :description "Generator"
+  :always-read t
+  :argument "-G="
+  :prompt "Generator: "
+  :choices (lambda ()
+             (let ((properties (teamake-configure--list-generators)))
+               (seq-map
+                (lambda (g)
+                  (plist-get g :name))
+                properties))))
+
+(transient-define-infix teamake-configure--platform ()
+  :transient 'transient--do-call ;; ensure read generator
+  :class 'transient-option
+  :description "Platform"
+  :argument "-A="
+  :prompt "Supported platform: "
+  :choices (lambda ()
+             (let ((properties (teamake-configure--generator-information
+                                (teamake-configure--get-generator))))
+               (or (plist-get properties :supportedPlatforms) '("")))))
+
+(transient-define-infix teamake-configure--toolset ()
+  :transient 'transient--do-call ;; ensure read generator
+  :class 'transient-option
+  :description "Toolset"
+  :argument "--toolset "
+  :prompt "Tolset: ")
 
 ;;;###autoload
 (transient-define-prefix teamake-configure (project)
@@ -290,8 +320,22 @@ Use current configure preset as base for preset specific expansions."
              (propertize (plist-get (transient-scope) :name) 'face 'teamake-project-name)
              (teamake-configure--string (transient-scope))))
    ["Options"
+    ("pr" "Read from preset" teamake-configure--select-preset)
     ("b" teamake-configure--binary-dir)
-    ("C" "Pre-load a script to populate the cache" "-C"
+    ("i" " Installation path" "--install-prefix="
+     :prompt "Install path: "
+     :reader transient-read-directory)
+    ("ge" teamake-configure--generator)
+    ("pl" teamake-configure--platform)
+    ("ts" teamake-configure--toolset)
+    ("tc" "Toolchain file" "--toolchain="
+     :prompt "Toolchain: "
+     :reader transient-read-file)
+    ("gr" "Generate graphviz of dependencies"
+     "--graphviz="
+     :prompt "Graphviz output: "
+     :reader transient-read-file)
+    ("C" " Pre-load a script to populate the cache" "-C"
      :class transient-option
      :prompt "Select script for cache varmup: "
      :reader transient-read-file)
@@ -299,23 +343,6 @@ Use current configure preset as base for preset specific expansions."
      :class transient-option
      :prompt "List entries as <var>[:<type>]=<value> and comma separate them: "
      :multi-value repeat)
-    ("ge" teamake-configure--generator)
-    ;; toolset and platform should be enabled/disabled when selecting generator
-    ("ts" "Specify toolset name if supported by generator" "-T="
-     :prompt "Toolset: ")
-    ("pl" " Specify platform name if supported by generator" "-A="
-     :prompt "Platform: ")
-    ("tc" "Toolchain file" "--toolchain="
-     :prompt "Toolchain: "
-     :reader transient-read-file)
-    ("i" " Installation path" "--install-prefix="
-     :prompt "Install path: "
-     :reader transient-read-directory)
-    ("pr" "Read from preset" teamake-configure--select-preset)
-    ("gr" "Generate graphviz of dependencies"
-     "--graphviz="
-     :prompt "Graphviz output: "
-     :reader transient-read-file)
     ]
    ]
   [

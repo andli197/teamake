@@ -350,6 +350,27 @@ prompt user for input.  A correct binary-dir must contain a CMakeCache.txt file.
                         pair))
                     save-values))))
 
+(defun teamake-transient--change-or-add-value (values option new-value)
+  "Change or add the NEW-VALUE of OPTION in VALUES."
+  (let ((value (seq-find (lambda (v) (string-match option v)) values)))
+    (if (not value)
+        (add-to-list 'values (format "%s%s" option new-value) t)
+      (setq values (seq-map
+                    (lambda (v)
+                      (if (string-match option v)
+                          (format "%s%s" option new-value)
+                        v))
+                    values)))
+    values))
+
+(defun teamake-transient--remove-value (values option)
+  "Remove the OPTION from VALUES."
+  (seq-filter
+   (lambda (v)
+     (if (not (string-match option v))
+         v))
+   values))
+
 (transient-define-suffix teamake-transient-save-current-values ()
   "Save current values for `transient-current-command' into active project."
   (interactive)
