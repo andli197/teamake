@@ -325,24 +325,6 @@ Use current configure preset as base for preset specific expansions."
     ("i" " Installation path" "--install-prefix="
      :prompt "Install path: "
      :reader transient-read-directory)
-    ("ge" teamake-configure--generator)
-    ("pl" teamake-configure--platform)
-    ("ts" teamake-configure--toolset)
-    ("tc" "Toolchain file" "--toolchain="
-     :prompt "Toolchain: "
-     :reader transient-read-file)
-    ("gr" "Generate graphviz of dependencies"
-     "--graphviz="
-     :prompt "Graphviz output: "
-     :reader transient-read-file)
-    ("C" " Pre-load a script to populate the cache" "-C"
-     :class transient-option
-     :prompt "Select script for cache varmup: "
-     :reader transient-read-file)
-    ("D" " Create or update a cmake cache entry." "-D"
-     :class transient-option
-     :prompt "List entries as <var>[:<type>]=<value> and comma separate them: "
-     :multi-value repeat)
     ]
    ]
   [
@@ -363,18 +345,38 @@ Use current configure preset as base for preset specific expansions."
     ]
    ]
   [
-   ["Debug"
+   ["Generation"
+    ("ge" teamake-configure--generator)
+    ("gp" teamake-configure--platform)
+    ("gs" teamake-configure--toolset)
+    ("gc" "Toolchain file" "--toolchain="
+     :prompt "Toolchain: "
+     :reader transient-read-file)
+    ]
+   ["Cache"
+    ("C" "Pre-load a script to populate the cache" "-C"
+     :class transient-option
+     :prompt "Select script for cache varmup: "
+     :reader transient-read-file)
+    ("D" "Create or update a cmake cache entry." "-D"
+     :class transient-option
+     :prompt "List entries as <var>[:<type>]=<value> and comma separate them: "
+     :multi-value repeat)
+    ]
+   ]
+  [
+   [5 "Debug"
     ("-do" "Put cmake in a debug mode"                "--debug-output")
     ("-dt" "Do not delete the try_compile build tree" "--debug-trycompile")
-    ("-df" " Put cmake find in a debug mode"          "--debug-find")
+    ("-df" "Put cmake find in a debug mode"           "--debug-find")
     ""
-    (5 "-cne" "Compile no warnings as error"                 "--compile-no-warning-as-error")
-    (5 "-lc" " Prepend log messages with context, if given"  "--log-context")
-    (5 "dfp" " Limit cmake debug-find to the comma-separated list of packages"   "--debug-find-pkg="
+    ("-cne" "Compile no warnings as error"                 "--compile-no-warning-as-error")
+    ("-lc" " Prepend log messages with context, if given"  "--log-context")
+    ("dfp" " Limit cmake debug-find to the comma-separated list of packages"   "--debug-find-pkg="
      :prompt "Packages (comma separated): ")
-    (5 "dfv" " Limit cmake debug-find to the comma-separated list of result variables" "--debug-find-var="
+    ("dfv" " Limit cmake debug-find to the comma-separated list of result variables" "--debug-find-var="
      :prompt "Variables (comma separated): ")
-    (5 "dsi" " Dump information about this system" "--system-information="
+    ("dsi" " Dump information about this system" "--system-information="
      :prompt "Select system dump file: "
      :reader transient-read-file)
     ]
@@ -402,6 +404,10 @@ Use current configure preset as base for preset specific expansions."
      "--log-level="
      :prompt "Select log level: "
      :choices ("ERROR" "WARNING" "NOTICE" "STATUS" "VERBOSE" "DEBUG" "TRACE"))
+    ("gr" "Generate graphviz of dependencies"
+     "--graphviz="
+     :prompt "Graphviz output: "
+     :reader transient-read-file)
     ]
    ["Profiling"
     ("pf" "Output format for profiling CMake scripts"
