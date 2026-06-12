@@ -218,7 +218,7 @@ PATH must be from within the code tree, otherwise return nil."
   (interactive (teamake-select-source-dir))
   (let ((source-dir (teamake--find-root path "CMakeLists.txt")))
     (if source-dir
-        (let ((project (teamake-project-from-source-dir path)))
+        (let ((project (teamake-project-from-source-dir source-dir)))
           (unless project
             (setq project (teamake-create-project-from-source-dir source-dir)))
           project))))
