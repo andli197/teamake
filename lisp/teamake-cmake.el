@@ -77,7 +77,7 @@ Name must not match CMakePresets.json but format must be that of a preset file."
 (defun teamake-preset--get-referenced-file (reference origin)
   "Return the deduced filepath to REFERENCE from ORIGIN."
   (if (not (file-name-absolute-p reference))
-      (file-name-concat (file-name-directory origin) reference)
+      (expand-file-name (file-name-concat (file-name-directory origin) reference))
     reference))
 
 (defun teamake-preset--get-property-as-list (preset property)
@@ -94,6 +94,45 @@ If the property does not exist, return empty list."
   "Return property :inherits from PRESET as a list."
   (teamake-preset--get-property-as-list preset :inherits))
 
+(defun teamake-preset--read-all-presets (filename &optional include)
+  "Main entry point for parsing all presets from FILENAME and the INCLUDE.
+
+All files referenced in the json file under the tag 'includes' are also
+located and parsed in the same way.  Rationale for providing INCLUDE at this
+call point is because CMakeUserPresets.json does not necessary explicit
+include the CMakePresets.json"
+  (let ((result '())
+        (contents '())
+        (includes '())
+        (files-to-process '())
+        (processed-files '()))
+    (add-to-list 'files-to-process filename)
+
+    (while (length> files-to-process 0)
+      (setq current (car files-to-process))
+      (setq files-to-process (cdr files-to-process))
+
+      (if (not (any (lambda (processed-file)
+                      (string= processed-file current))
+                    processed-files))
+          (progn
+            (add-to-list 'processed-files current)
+            (setq contents (teamake-preset--read-json-file current))
+            (plist-put contents :absolutePath current)
+
+            (if (and (string= current filename) include)
+                (progn
+                  (setq includes (teamake-preset--get-property-as-list contents :includes))
+                  (add-to-list 'includes include)
+                  (plist-put contents :includes includes)))
+            (seq-do
+             (lambda (inc)
+               (add-to-list 'files-to-process
+                            (teamake-preset--get-referenced-file inc current)
+                            t))
+             (teamake-preset--get-property-as-list contents :includes))
+            (add-to-list 'result contents t))))
+    result))
 (defun teamake-preset--parse-file (filename &optional include)
   "Parse each preset from FILENAME and the optional INCLUDE file.
 
