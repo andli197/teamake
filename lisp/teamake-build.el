@@ -24,6 +24,7 @@
   (apply #'teamake-process-invoke-cmake
          project
          (append (list "--build" (plist-get project :binary-dir))
+                 (list (format "--config %s" (plist-get project :configuration)))
                  (teamake-get-current-values 'teamake-build project))))
 
 (defun teamake-cmake-build-preset (project)

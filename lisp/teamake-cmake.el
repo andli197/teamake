@@ -133,6 +133,7 @@ include the CMakePresets.json"
              (teamake-preset--get-property-as-list contents :includes))
             (add-to-list 'result contents t))))
     result))
+
 (defun teamake-preset--parse-file (filename &optional include)
   "Parse each preset from FILENAME and the optional INCLUDE file.
 

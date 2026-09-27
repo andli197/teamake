@@ -257,7 +257,8 @@ configuration values."
   :transient 'transient--do-replace
   :if (lambda () (transient-scope))
   (interactive)
-  (transient-setup 'teamake-cmake-navigation '() '() :scope (transient-scope)))
+  (let ((project (transient-scope)))
+    (transient-setup 'teamake-cmake-navigation '() '() :scope project)))
 
 (transient-define-prefix teamake-project (project)
   "Manage `teamake-project' settings."
@@ -276,9 +277,11 @@ configuration values."
    ]
   ["Project"
    ("N" "New" teamake-project--create-project)
-   ("S" "Save" teamake-project--save-project)
+   ("S" "Save" teamake-project--save-project
+    :transient t)
    ("L" "Load" teamake-project--load-project)
-   ("D" "Delete" teamake-project--delete-project)
+   ("D" "Delete" teamake-project--delete-project
+    :transient t)
    ]
   ["Navigate"
    ("C" teamake-project--teamake-cmake-navigate)
@@ -331,11 +334,11 @@ configuration values."
 
 (transient-define-prefix teamake-cmake-navigation (project)
   [:if
-   (lambda () (transient-scope) "")
+   (lambda () (transient-scope))
    :description
    (lambda () (format "%s %s %s\n"
                       (propertize "CMake" 'face 'teamake-heading)
-                      (propertize (plist-get (transient-scope) :configuration) 'face 'teamake-heading)
+                      (propertize (or (plist-get (transient-scope) :configuration) "<No configuration>") 'face 'teamake-heading)
                       (propertize (plist-get (transient-scope) :name) 'face 'teamake-project-name)
                       ))
    ("c" teamake-project--teamake-configure)
