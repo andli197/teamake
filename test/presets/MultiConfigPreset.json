@@ -16,7 +16,7 @@
     {
       "name": "MSVC",
       "inherits": "Config-Base",
-      "toolchailFile": "${sourceDir}/toolchain/msvc.cmake",
+      "toolchainFile": "${sourceDir}/toolchain/msvc.cmake",
       "condition": {
         "type": "equals",
         "lhs": "${hostSystemName}",
@@ -26,7 +26,7 @@
     {
       "name": "GCC",
       "inherits": "Config-Base",
-      "toolchailFile": "${sourceDir}/toolchain/gcc.cmake",
+      "toolchainFile": "${sourceDir}/toolchain/gcc.cmake",
       "condition": {
         "type": "equals",
         "lhs": "${hostSystemName}",

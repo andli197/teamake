@@ -109,8 +109,8 @@ include the CMakePresets.json"
     (add-to-list 'files-to-process filename)
 
     (while (length> files-to-process 0)
-      (setq current (car files-to-process))
-      (setq files-to-process (cdr files-to-process))
+      (setq current (car files-to-process)
+            files-to-process (cdr files-to-process))
 
       (if (not (any (lambda (processed-file)
                       (string= processed-file current))
@@ -134,6 +134,28 @@ include the CMakePresets.json"
             (add-to-list 'result contents t))))
     result))
 
+(defun teamake-preset--parse-preset-contents (contents)
+  "Parse preset CONTENTS to separate preset objects.
+
+Each object is a property list with :category and :absolutePath telling which
+category and file is stems from."
+  (let ((parsed-presets '()))
+    (seq-do
+     (lambda (file)
+       (seq-do
+        (lambda (category)
+          (seq-do
+           (lambda (preset)
+             (plist-put preset :absolutePath (plist-get file :absolutePath))
+             (plist-put preset :category category)
+             (add-to-list 'parsed-presets preset t))
+           (plist-get file category)))
+        ;; TODO: Possibly read version from file and match against schema
+        ;;       for which presets are valid and only scan through those.
+        '(:configurePresets :buildPresets :installPresets :testPresets :workflowPresets :packagePresets))
+       )
+     contents)
+    parsed-presets))
 (defun teamake-preset--parse-file (filename &optional include)
   "Parse each preset from FILENAME and the optional INCLUDE file.
 
