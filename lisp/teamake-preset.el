@@ -1,4 +1,4 @@
-;;; teamake-preset --- Cmake preset handling for teamake
+;;; teamake-preset --- Cmake preset handling for teamake -*- lexical-binding: t; -*-
 ;;; Commentary:
 ;;; Code:
 

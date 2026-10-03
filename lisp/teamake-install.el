@@ -1,4 +1,4 @@
-;;; teamake-install --- CMake install for teamake
+;;; teamake-install --- CMake install for teamake -*- lexical-binding: t; -*-
 ;;; Commentary:
 ;;; Code:
 

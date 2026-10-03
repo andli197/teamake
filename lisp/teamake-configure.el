@@ -1,4 +1,4 @@
-;;; teamake-configure --- CMake configuration for teamake
+;;; teamake-configure --- CMake configuration for teamake -*- lexical-binding: t; -*-
 ;;; Commentary:
 ;;; Code:
 

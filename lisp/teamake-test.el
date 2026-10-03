@@ -1,4 +1,4 @@
-;;; teamake-test --- CTest commands for teamake
+;;; teamake-test --- CTest commands for teamake -*- lexical-binding: t; -*-
 ;;; Commentary:
 ;;; Code:
 

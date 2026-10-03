@@ -1,4 +1,4 @@
-;;; teamake-cmake --- Processing and raw parsing of CMakes files
+;;; teamake-cmake --- Processing and raw parsing of CMakes files -*- lexical-binding: t; -*-
 ;;; Commentary:
 ;;; Code:
 

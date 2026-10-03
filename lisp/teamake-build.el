@@ -1,4 +1,4 @@
-;;; teamake-build --- CMake build for teamake
+;;; teamake-build --- CMake build for teamake -*- lexical-binding: t; -*-
 ;;; Commentary:
 ;;; Code:
 

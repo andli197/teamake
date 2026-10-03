@@ -1,4 +1,4 @@
-;;; teamake-process --- Base processing functionality for teamake
+;;; teamake-process --- Base processing functionality for teamake -*- lexical-binding: t; -*-
 ;;; Commentary:
 ;;; Code:
 

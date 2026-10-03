@@ -1,4 +1,4 @@
-;;; teamake-project --- Project configuration for teamake
+;;; teamake-project --- Project configuration for teamake  -*- lexical-binding: t; -*-
 ;;; Commentary:
 ;;; Code:
 

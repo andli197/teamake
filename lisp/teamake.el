@@ -1,4 +1,4 @@
-;;; teamake --- Setup for whole of teamake
+;;; teamake --- Setup for whole of teamake  -*- lexical-binding: t; -*-
 ;;; Commentary:
 ;;; Code:
 

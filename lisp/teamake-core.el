@@ -1,4 +1,4 @@
-;;; teamake-core --- Shared core functions that is used by different modules
+;;; teamake-core --- Shared core functions that is used by different modules -*- lexical-binding: t; -*-
 ;;; Commentary:
 ;;; Code:
 

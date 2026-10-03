@@ -1,4 +1,4 @@
-;;; teamake-package --- CPack commands for teamake
+;;; teamake-package --- CPack commands for teamake -*- lexical-binding: t; -*-
 ;;; Commentary:
 ;;; Code:
 
