@@ -353,6 +353,8 @@ configuration values."
    ("pr" teamake-project--teamake-preset)
    ;; ("pa" teamake-project--teamake-package)
    ;; ("w" teamake-project--teamake-workflow)
+   " "
+   ("xx" "Execute last command" teamake-process--reexecute-last-command)
    ]
   ["Navigate"
    ("P" teamake-cmake--teamake-project)

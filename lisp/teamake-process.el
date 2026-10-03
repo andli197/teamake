@@ -4,6 +4,23 @@
 
 (require 'teamake-core)
 
+(defvar teamake-process--last-command '(:command "cmake" :args "--help")
+  "Last executed command for later rerun if wanting to.
+
+Defaults to \"cmake --help\" before any commands have been executed.")
+
+(defun teamake-process--reexecute-last-command ()
+  "Execute the last command again.
+
+`teamake-process--last-command' is specifying the command to be executed.
+If :project is present execute in that project, otherwise execute the command
+in `default-directory'"
+  (let ((program (plist-get teamake-process--last-command :program))
+        (args (plist-get teamake-process--last-command :args))
+        (project (or (plist-get teamake-process--last-command :project)
+                     (list :source-dir default-directory))))
+    (teamake-process--start-process (project program args))))
+
 (defun teamake-process--start-process (project program &rest args)
   "Start an asynchronous process of PROGRAM with ARGS for PROJECT."
   (pcase-let* ((shell-file-name teamake-process-preferred-shell)
@@ -13,7 +30,9 @@
                                (file-name-nondirectory program)
                                process-buf
                                program
-                                args)))
+                               args)))
+    (setq teamake-process--last-command
+          (list :project project :program program :args args))
     (set-process-buffer process process-buf)
     (with-current-buffer process-buf
       (goto-char (point-max))
