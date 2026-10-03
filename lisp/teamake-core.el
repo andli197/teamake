@@ -117,11 +117,14 @@ If available on PATH this needs not to be set."
 Load contents of the file specified by `teamake-project-configurations-file'
 into the variable `teamake-project-configurations'."
   (interactive)
-  (if (file-exists-p teamake-project-configurations-file)
-      (setq teamake-project-configurations
-            (with-temp-buffer
-              (insert-file-contents teamake-project-configurations-file)
-              (read (current-buffer))))))
+  (cond ((file-exists-p teamake-project-configurations-file)
+         (setq teamake-project-configurations
+              (with-temp-buffer
+                (insert-file-contents teamake-project-configurations-file)
+                (read (current-buffer))))
+         (message "Project configurations loaded from %s" teamake-project-configurations-file))
+        (t
+         (error "PRoject configurations file not found (%s)" teamake-project-configurations-file))))
 
 (defun teamake--visit-project-configurations ()
   "Visit the `teamake-project-configurations-file'."
@@ -140,7 +143,8 @@ file specified by `teamake-project-configurations-file'."
     (let ((print-length '())
           (print-level '()))
       (pp teamake-project-configurations (current-buffer)))
-    (write-region '() '() teamake-project-configurations-file '() 'silent)))
+    (write-region '() '() teamake-project-configurations-file '() 'silent))
+  (message "Project configurations written to %s" teamake-project-configurations-file))
 
 (defun teamake--human-readable (project)
   "Display PROJECT as a unique identifier."
@@ -510,18 +514,6 @@ Version is divided into MAJOR, MINOR and PATCH and matched using Emacs
         (patch (or patch 0))
         (version (teamake--cmake-version)))
     (version-list-<= (list major minor patch) version)))
-
-
-;; (read-multiple-choice
-;;  "Continue connecting?"
-;;  '((?a "always" "Accept certificate for this and future sessions.")
-;;    (?s "session only" "Accept certificate this session only.")
-;;    (?n "no" "Refuse to use certificate, close connection."))
-;;  "Longer help string here"
-;;  t)
-;; (defun teamake--completing-read (prompt)
-;;   ;; https://www.gnu.org/software/emacs/manual/html_node/elisp/Programmed-Completion.html
-;;   )
 
 (provide 'teamake-core)
 ;;; teamake-core.el ends here

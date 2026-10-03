@@ -282,6 +282,11 @@ configuration values."
    ("L" "Load" teamake-project--load-project)
    ("D" "Delete" teamake-project--delete-project
     :transient t)
+   " "
+   ("W" "Write to file" teamake-save-project-configurations
+    :transient t)
+   ("R" "Read from file" teamake-load-project-configurations
+    :transient t)
    ]
   ["Navigate"
    ("C" teamake-project--teamake-cmake-navigate)
